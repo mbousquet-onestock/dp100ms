@@ -6,3 +6,4 @@ web/dist/
 *.prof
 bench/results/*.tmp
 *.test
+bench/results/baskets.json

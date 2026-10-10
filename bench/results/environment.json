@@ -1,0 +1,13 @@
+{
+  "date": "2026-10-10T18:06:20Z",
+  "baseUrl": "http://localhost:8090",
+  "cpuModel": "Intel(R) Xeon(R) Processor @ 2.80GHz",
+  "cpus": 4,
+  "memTotalMb": 16093,
+  "kernel": "Linux 6.18.44-fc-v114",
+  "k6": "k6 v0.54.0 (commit/baba871c8a, go1.23.1, linux/amd64)",
+  "k6Cpus": "2,3",
+  "serverCpus": "0,1",
+  "server": {"goVersion": "go1.24.7", "numCpu": 2, "gomaxprocs": 2, "goroutines": 5, "heapAllocMb": 37.2, "sysMb": 46.5, "numGc": 2, "cpuSeconds": 0.181028, "os": "linux", "arch": "amd64"},
+  "health": {"persistError":"","persistence":false,"platform":"local","seed":42,"status":"ok","stockLines":1200000,"uptimeSec":2.130423268}
+}
