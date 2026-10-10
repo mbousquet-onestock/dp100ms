@@ -96,7 +96,7 @@ gcloud builds submit --config cloudbuild.yaml \
   --substitutions=_REGION=$REGION,_SERVICE=dp100ms,_SQL_INSTANCE=$PROJECT:$REGION:dp100ms,SHORT_SHA=$(git rev-parse --short HEAD)
 ```
 
-`cloudbuild.yaml` builds the image (frontend + API), pushes it to Artifact Registry and deploys Cloud Run with 2 vCPU, 1 GiB, concurrency 250, min 1 instance (no cold start on the first request), CPU boost at startup, secrets as environment variables and the Cloud SQL connection. The empty database is migrated and seeded automatically at the first boot (about 30 s); later boots load it in a few seconds.
+`cloudbuild.yaml` builds the image (frontend + API), pushes it to Artifact Registry and deploys Cloud Run with 2 vCPU, 1 GiB, concurrency 250, min 1 instance (no cold start on the first request), CPU boost at startup, secrets as environment variables and the Cloud SQL connection. The empty database is migrated and seeded automatically at the first boot (30 to 90 s depending on CPU and database); later boots load it in a few seconds.
 
 ### Sizing notes
 

@@ -1,0 +1,364 @@
+@import './tokens.css';
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+  body {
+    margin: 0;
+    font-family: var(--font-family);
+    font-size: 14px;
+    line-height: 1.4;
+    color: var(--text-primary);
+    background: var(--surface-page-background);
+    -webkit-font-smoothing: antialiased;
+  }
+  h1,
+  h2,
+  h3,
+  h4 {
+    font-weight: 500;
+    color: var(--text-primary);
+  }
+  :focus-visible {
+    outline: 1px solid var(--border-focus);
+    outline-offset: 0;
+  }
+  code,
+  pre,
+  .font-code {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  }
+}
+
+@layer components {
+  /* Single-column grids: keep tracks shrinkable so wide content (maps, SVG, tables) scrolls inside its card. */
+  .grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  /* Typography (os-title-*, os-body-*) */
+  .os-title-l {
+    @apply text-2xl font-medium text-neutral-800;
+  }
+  .os-title-m {
+    @apply text-xl font-medium text-neutral-800;
+  }
+  .os-title-s {
+    @apply text-m font-medium text-neutral-800;
+  }
+  .os-label {
+    @apply text-xs text-neutral-500;
+  }
+
+  /* Card: white, 1px border, 5px radius, no shadow */
+  .card {
+    @apply rounded-m border border-border bg-white;
+  }
+  .card-pad {
+    @apply p-xl;
+  }
+  .card-header {
+    @apply flex items-center justify-between gap-m border-b border-border px-xl py-l;
+  }
+
+  /* Buttons */
+  .btn {
+    @apply inline-flex h-control select-none items-center justify-center gap-s whitespace-nowrap rounded-m px-l text-s font-medium leading-none;
+    cursor: pointer;
+    border: 1px solid transparent;
+  }
+  .btn svg {
+    width: 18px;
+    height: 18px;
+    flex: none;
+  }
+  .btn-sm {
+    @apply h-[28px] px-m text-xs;
+  }
+  .btn-sm svg {
+    width: 16px;
+    height: 16px;
+  }
+  .btn-primary {
+    background: var(--primary-1000);
+    color: #fff;
+  }
+  .btn-primary:hover {
+    background: var(--primary-800);
+  }
+  .btn-secondary {
+    background: #fff;
+    color: var(--text-primary);
+    border-color: var(--border-primary);
+  }
+  .btn-secondary:hover {
+    background: var(--neutral-20);
+  }
+  .btn-tertiary {
+    background: transparent;
+    color: var(--text-primary);
+  }
+  .btn-tertiary:hover {
+    background: var(--surface-hover-transparent);
+  }
+  .btn-danger {
+    background: var(--red-1000);
+    color: #fff;
+  }
+  .btn-danger:hover {
+    background: var(--red-800);
+  }
+  .btn-tertiary-red {
+    background: transparent;
+    color: var(--red-1000);
+  }
+  .btn-tertiary-red:hover {
+    background: var(--red-t-100);
+  }
+  .btn-icon {
+    @apply w-[36px] px-0;
+  }
+  .btn-sm.btn-icon {
+    @apply w-[28px];
+  }
+  .btn:disabled,
+  .btn[aria-disabled='true'] {
+    background: var(--neutral-30) !important;
+    color: var(--neutral-300) !important;
+    border-color: transparent !important;
+    cursor: default;
+  }
+  .btn-tertiary:disabled,
+  .btn-tertiary-red:disabled {
+    background: transparent !important;
+  }
+
+  /* Inputs */
+  .input,
+  .select,
+  .textarea {
+    @apply h-control w-full rounded-m border border-border bg-white px-l text-s text-neutral-800;
+  }
+  .textarea {
+    @apply h-auto py-m;
+  }
+  .input::placeholder,
+  .textarea::placeholder {
+    color: var(--text-placeholder);
+  }
+  .input:focus,
+  .select:focus,
+  .textarea:focus {
+    outline: 1px solid var(--border-focus);
+    outline-offset: -1px;
+  }
+  .input.invalid,
+  .select.invalid,
+  .textarea.invalid {
+    border-color: var(--border-error);
+  }
+  .input:disabled,
+  .select:disabled {
+    background: var(--surface-disabled);
+    color: var(--text-disabled);
+  }
+  .select {
+    appearance: none;
+    padding-right: 32px;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12' fill='none' stroke='%237f7f7f' stroke-width='1.5'%3E%3Cpath d='M3 4.5 6 7.5 9 4.5'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 12px center;
+  }
+  .field-label {
+    @apply mb-s block text-xs font-medium text-grey-800;
+  }
+  .field-error {
+    @apply mt-xs text-xs text-red;
+  }
+  .field-hint {
+    @apply mt-xs text-xs text-neutral-500;
+  }
+
+  /* Badge (OsBadge): 12px radius, 10% tint */
+  .badge {
+    @apply inline-flex h-[22px] items-center gap-s whitespace-nowrap rounded-l px-m text-xs font-medium leading-none;
+  }
+  .badge svg {
+    width: 14px;
+    height: 14px;
+  }
+  /* Chip / filter tag */
+  .chip {
+    @apply inline-flex h-[30px] cursor-pointer select-none items-center gap-s rounded-l border border-border bg-white px-l text-xs font-medium text-neutral-700;
+  }
+  .chip:hover {
+    background: var(--surface-hover);
+  }
+  .chip[aria-pressed='true'] {
+    border-color: var(--border-brand);
+    background: var(--primary-t-100);
+    color: var(--primary-1000);
+  }
+
+  /* Table */
+  .table {
+    @apply w-full border-collapse text-s;
+  }
+  .table th {
+    @apply whitespace-nowrap border-b border-border px-l py-l text-left text-s font-medium;
+    color: var(--grey-800);
+  }
+  .table td {
+    @apply border-b border-border px-l text-left align-middle;
+    height: 44px;
+  }
+  .table td:first-child {
+    white-space: nowrap;
+  }
+  .table tbody tr:last-child td {
+    border-bottom: none;
+  }
+  .table tr.clickable {
+    cursor: pointer;
+  }
+  .table tr.clickable:hover td,
+  .table tr.selected td {
+    background: var(--surface-hover);
+  }
+  .table-compact td {
+    height: 36px;
+  }
+  .num {
+    font-variant-numeric: tabular-nums;
+    text-align: right !important;
+  }
+
+  /* Segmented control */
+  .segmented {
+    @apply inline-flex h-control overflow-hidden rounded-m border border-border bg-white;
+  }
+  .segmented button {
+    @apply px-l text-s text-neutral-700;
+    border-right: 1px solid var(--border-primary);
+  }
+  .segmented button:last-child {
+    border-right: none;
+  }
+  .segmented button[aria-pressed='true'] {
+    background: var(--primary-t-100);
+    color: var(--primary-1000);
+    font-weight: 500;
+    box-shadow: inset 0 0 0 1px var(--border-brand);
+  }
+
+  /* Toggle switch */
+  .switch {
+    @apply relative inline-flex h-[20px] w-[36px] flex-none cursor-pointer items-center rounded-round;
+    background: var(--neutral-200);
+  }
+  .switch[aria-checked='true'] {
+    background: var(--primary-1000);
+  }
+  .switch::after {
+    content: '';
+    @apply absolute left-[2px] h-[16px] w-[16px] rounded-round bg-white;
+    transition: none;
+  }
+  .switch[aria-checked='true']::after {
+    left: 18px;
+  }
+  .switch:disabled {
+    opacity: 0.5;
+    cursor: default;
+  }
+
+  .popover {
+    @apply rounded-m border border-border bg-white;
+    box-shadow: var(--shadow-floating-container);
+  }
+
+  .kpi-value {
+    @apply text-3xl font-normal leading-none text-neutral-800;
+    font-variant-numeric: tabular-nums;
+  }
+  .kpi-label {
+    @apply mt-m text-xs text-neutral-500;
+  }
+
+  .code-block {
+    @apply overflow-auto rounded-m border border-border p-l text-xs leading-relaxed;
+    background: var(--neutral-30);
+    color: var(--neutral-800);
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    white-space: pre;
+  }
+}
+
+/* Badge colors are referenced dynamically (badge-${color}), so they live outside
+   @layer components to avoid being purged. */
+.badge-primary {
+  background: var(--primary-t-100);
+  color: var(--primary-1000);
+}
+.badge-red {
+  background: var(--red-t-100);
+  color: var(--red-1000);
+}
+.badge-orange {
+  background: var(--orange-t-100);
+  color: #c35f0b;
+}
+.badge-blue {
+  background: var(--blue-t-100);
+  color: #1c78c6;
+}
+.badge-green {
+  background: var(--green-t-100);
+  color: var(--green-1000);
+}
+.badge-purple {
+  background: var(--purple-t-100);
+  color: var(--purple-1000);
+}
+.badge-grey {
+  background: var(--neutral-t-50);
+  color: var(--grey-800);
+}
+
+/* Spinner (only motion in the product) */
+@keyframes os-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+.os-spin {
+  animation: os-spin 1s linear infinite;
+}
+
+/* Leaflet adjustments */
+.leaflet-container {
+  font-family: var(--font-family);
+  background: var(--neutral-50);
+}
+.leaflet-popup-content-wrapper {
+  border-radius: 5px;
+  box-shadow: var(--shadow-floating-container);
+}
+.leaflet-popup-tip {
+  box-shadow: none;
+}
+
+/* React Flow adjustments */
+.react-flow__attribution {
+  font-size: 10px;
+}
+.react-flow__edge.selected .react-flow__edge-path,
+.react-flow__edge:focus .react-flow__edge-path {
+  stroke: var(--primary-1000) !important;
+}
