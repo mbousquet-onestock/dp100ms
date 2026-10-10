@@ -69,7 +69,7 @@ func (c *reqCtx) traverse(p *network.Path, start int64) *pathTiming {
 
 func (c *reqCtx) computeTiming(p *network.Path, start int64) *pathTiming {
 	clk := c.clk
-	pt := &pathTiming{legs: make([]legTime, 0, len(p.Legs))}
+	pt := c.newTiming(len(p.Legs))
 	ready := start
 	for i, l := range p.Legs {
 		dep, ok := clk.NextDeparture(l.PickupCal, ready, l.Departures, l.CutoffMinutesBefore)
@@ -150,3 +150,20 @@ func (c *reqCtx) prepReady(node *network.Node) (int64, bool) {
 }
 
 var _ = model.CustomerNode
+
+// newTiming carves path timings and their legs out of per-request chunks
+// to keep the allocation count low on the hot path.
+func (c *reqCtx) newTiming(nLegs int) *pathTiming {
+	if len(c.ptPool) == cap(c.ptPool) {
+		c.ptPool = make([]pathTiming, 0, 256)
+	}
+	c.ptPool = c.ptPool[:len(c.ptPool)+1]
+	pt := &c.ptPool[len(c.ptPool)-1]
+	if cap(c.legPool)-len(c.legPool) < nLegs {
+		c.legPool = make([]legTime, 0, 1024)
+	}
+	start := len(c.legPool)
+	c.legPool = c.legPool[:start+nLegs]
+	pt.legs = c.legPool[start : start : start+nLegs]
+	return pt
+}

@@ -98,6 +98,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Access-Control-Allow-Origin", "*")
 	w.Header().Set("Access-Control-Allow-Headers", "Authorization, Content-Type")
 	w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS")
+	w.Header().Set("Access-Control-Expose-Headers", "X-Calculation-Time-Ms, X-Options-Count, X-Strategies")
 	if r.Method == http.MethodOptions {
 		w.WriteHeader(http.StatusNoContent)
 		return
@@ -362,7 +363,22 @@ func (s *Server) promise(w http.ResponseWriter, r *http.Request) {
 		writeProblem(w, r, http.StatusInternalServerError, "internal", err.Error(), nil)
 		return
 	}
-	w.Header().Set("X-Calculation-Time-Ms", strconv.FormatFloat(resp.CalculationTimeMs, 'f', 3, 64))
+	h := w.Header()
+	h.Set("X-Calculation-Time-Ms", strconv.FormatFloat(resp.CalculationTimeMs, 'f', 3, 64))
+	h.Set("X-Options-Count", strconv.Itoa(len(resp.Options)))
+	strategies := make([]string, 0, 3)
+	for _, o := range resp.Options {
+		found := false
+		for _, s := range strategies {
+			if s == o.Strategy {
+				found = true
+			}
+		}
+		if !found {
+			strategies = append(strategies, o.Strategy)
+		}
+	}
+	h.Set("X-Strategies", strings.Join(strategies, ","))
 	writeJSON(w, 200, resp)
 }
 

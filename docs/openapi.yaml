@@ -83,6 +83,12 @@ paths:
             X-Calculation-Time-Ms:
               description: Engine computation time in milliseconds.
               schema: { type: number }
+            X-Options-Count:
+              description: Number of options in the body.
+              schema: { type: integer }
+            X-Strategies:
+              description: Comma-separated strategies present in the options.
+              schema: { type: string }
           content:
             application/json:
               schema: { $ref: '#/components/schemas/PromiseResponse' }
@@ -1378,6 +1384,7 @@ components:
             allocations: { type: integer }
             plansEvaluated: { type: integer }
             pathsConsidered: { type: integer }
+            hubsPruned: { type: integer, description: Consolidation hubs skipped by branch and bound. }
             routeCacheHit: { type: boolean }
             stockVersion: { type: integer }
             configVersion: { type: integer }

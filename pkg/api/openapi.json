@@ -111,6 +111,18 @@
         "schema": {
          "type": "number"
         }
+       },
+       "X-Options-Count": {
+        "description": "Number of options in the body.",
+        "schema": {
+         "type": "integer"
+        }
+       },
+       "X-Strategies": {
+        "description": "Comma-separated strategies present in the options.",
+        "schema": {
+         "type": "string"
+        }
        }
       },
       "content": {
@@ -4271,6 +4283,10 @@
        },
        "pathsConsidered": {
         "type": "integer"
+       },
+       "hubsPruned": {
+        "type": "integer",
+        "description": "Consolidation hubs skipped by branch and bound."
        },
        "routeCacheHit": {
         "type": "boolean"

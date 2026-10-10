@@ -24,6 +24,9 @@ type allocation struct {
 	qty     [][]int // [source][item]
 	sig     uint64  // order-independent hash of (source, quantities)
 	h       float64 // heuristic rank (lower is better)
+	// groups caches the parcel groups per source and their union.
+	groups    [][]group
+	allGroups []group
 }
 
 // mix is a 64-bit finaliser (splitmix64) used to build hash keys.
@@ -71,7 +74,7 @@ func (c *reqCtx) findCandidates(mode string, dr *network.DestRoutes) []candidate
 		dist  float64
 	}
 	dlat, dlon, hasCentroid := geo.DeptCentroid(c.dept)
-	var pres []pre
+	pres := make([]pre, 0, sn.NPoints)
 	for w, word := range union {
 		for word != 0 {
 			b := bits.TrailingZeros64(word)

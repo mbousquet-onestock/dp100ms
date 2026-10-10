@@ -69,13 +69,30 @@ func (p *plan) signature() uint64 {
 }
 
 func (c *reqCtx) groupsFor(a *allocation, si int, cands []candidate) []group {
-	var gs []group
-	for i, q := range a.qty[si] {
-		if q > 0 {
-			gs = append(gs, group{item: i, source: cands[a.sources[si]].node.ID, qty: q})
+	if a.groups == nil {
+		// computed once per allocation: per source groups and their union
+		a.groups = make([][]group, len(a.sources))
+		n := 0
+		for i := range a.sources {
+			for _, q := range a.qty[i] {
+				if q > 0 {
+					n++
+				}
+			}
 		}
+		all := make([]group, 0, n)
+		for i, ci := range a.sources {
+			start := len(all)
+			for item, q := range a.qty[i] {
+				if q > 0 {
+					all = append(all, group{item: item, source: cands[ci].node.ID, qty: q})
+				}
+			}
+			a.groups[i] = all[start:len(all):len(all)]
+		}
+		a.allGroups = all
 	}
-	return gs
+	return a.groups[si]
 }
 
 func (c *reqCtx) limits(p *network.Path) packLimits {
@@ -97,22 +114,10 @@ func pathCost(p *network.Path, parcels []parcel) float64 {
 	return cost
 }
 
-// bestShipment picks the best path from an origin for a set of groups.
-func (c *reqCtx) bestShipment(kind, origin string, paths []*network.Path, ready int64, groups []group, cheapest bool) *shipPlan {
-	var best *shipPlan
-	better := func(a, b *shipPlan) bool {
-		ta, tb := a.timing.window.To, b.timing.window.To
-		if cheapest {
-			if math.Abs(a.cost-b.cost) > 0.005 {
-				return a.cost < b.cost
-			}
-			return ta < tb
-		}
-		if ta != tb {
-			return ta < tb
-		}
-		return a.cost < b.cost
-	}
+// bestShipments evaluates every path from an origin for a set of groups and
+// returns the fastest (ties: cheapest) and the cheapest (ties: fastest)
+// feasible shipments in a single pass. Packing is memoised per limit set.
+func (c *reqCtx) bestShipments(kind, origin string, paths []*network.Path, ready int64, groups []group) (fast, cheap *shipPlan) {
 	type packed struct {
 		lim     packLimits
 		parcels []parcel
@@ -125,10 +130,6 @@ func (c *reqCtx) bestShipment(kind, origin string, paths []*network.Path, ready 
 		}
 		pt := c.traverse(p, ready)
 		if !pt.ok {
-			continue
-		}
-		// a slower path cannot win in fastest mode: skip packing it
-		if !cheapest && best != nil && pt.window.To > best.timing.window.To {
 			continue
 		}
 		lim := c.limits(p)
@@ -147,13 +148,22 @@ func (c *reqCtx) bestShipment(kind, origin string, paths []*network.Path, ready 
 		if !ok {
 			continue
 		}
-		sp := &shipPlan{kind: kind, origin: origin, path: p, timing: pt, groups: groups, parcels: parcels, ready: ready}
-		sp.cost = pathCost(p, parcels)
-		if best == nil || better(sp, best) {
-			best = sp
+		cost := pathCost(p, parcels)
+		to := pt.window.To
+		if fast == nil || to < fast.timing.window.To || (to == fast.timing.window.To && cost < fast.cost) {
+			fast = &shipPlan{kind: kind, origin: origin, path: p, timing: pt, groups: groups, parcels: parcels, ready: ready, cost: cost}
+		}
+		if cheap == nil || cost < cheap.cost-0.005 || (math.Abs(cost-cheap.cost) <= 0.005 && to < cheap.timing.window.To) {
+			cheap = &shipPlan{kind: kind, origin: origin, path: p, timing: pt, groups: groups, parcels: parcels, ready: ready, cost: cost}
 		}
 	}
-	return best
+	return fast, cheap
+}
+
+// bestShipment returns the fastest feasible shipment.
+func (c *reqCtx) bestShipment(kind, origin string, paths []*network.Path, ready int64, groups []group) *shipPlan {
+	fast, _ := c.bestShipments(kind, origin, paths, ready, groups)
+	return fast
 }
 
 func (c *reqCtx) postalOK(p *network.Path) bool {
@@ -172,37 +182,49 @@ func prepCost(node *network.Node, parcels int) float64 {
 }
 
 // planDirect ships every source's goods directly (possibly through transit
-// hubs) to the customer, without consolidation.
-func (c *reqCtx) planDirect(mode string, dr *network.DestRoutes, cands []candidate, a *allocation, cheapest bool) *plan {
-	p := &plan{mode: mode, alloc: a, cands: cands, sources: len(a.sources)}
+// hubs) to the customer, without consolidation. It returns the plan where
+// each source takes its fastest path and the plan where each takes its
+// cheapest path (identical plans are deduplicated by the caller).
+func (c *reqCtx) planDirect(mode string, dr *network.DestRoutes, cands []candidate, a *allocation) (fastPlan, cheapPlan *plan) {
+	strategy := StrategyMultiDirect
 	if len(a.sources) == 1 {
-		p.strategy = StrategySingle
-	} else {
-		p.strategy = StrategyMultiDirect
+		strategy = StrategySingle
 	}
+	fp := &plan{mode: mode, strategy: strategy, alloc: a, cands: cands, sources: len(a.sources)}
+	cp := &plan{mode: mode, strategy: strategy, alloc: a, cands: cands, sources: len(a.sources)}
 	for si, ci := range a.sources {
 		cd := cands[ci]
 		groups := c.groupsFor(a, si, cands)
-		sp := c.bestShipment("DIRECT", cd.node.ID, dr.ByIdx[cd.node.Idx], cd.ready, groups, cheapest)
-		if sp == nil {
-			return nil
+		fast, cheap := c.bestShipments("DIRECT", cd.node.ID, dr.ByIdx[cd.node.Idx], cd.ready, groups)
+		if fast == nil {
+			return nil, nil
 		}
-		p.ships = append(p.ships, sp)
-		p.cost += sp.cost + prepCost(cd.node, len(sp.parcels))
-		p.packagesFinal += len(sp.parcels)
-		p.legs += len(sp.path.Legs)
-		if sp.timing.window.To > p.window.To {
-			p.window.To = sp.timing.window.To
-		}
-		if sp.timing.window.From > p.window.From {
-			p.window.From = sp.timing.window.From
-		}
+		fp.addDirect(fast, cd)
+		cp.addDirect(cheap, cd)
 	}
+	fp.finishDirect()
+	cp.finishDirect()
+	return fp, cp
+}
+
+func (p *plan) addDirect(sp *shipPlan, cd candidate) {
+	p.ships = append(p.ships, sp)
+	p.cost += sp.cost + prepCost(cd.node, len(sp.parcels))
+	p.packagesFinal += len(sp.parcels)
+	p.legs += len(sp.path.Legs)
+	if sp.timing.window.To > p.window.To {
+		p.window.To = sp.timing.window.To
+	}
+	if sp.timing.window.From > p.window.From {
+		p.window.From = sp.timing.window.From
+	}
+}
+
+func (p *plan) finishDirect() {
 	p.packagesBefore = p.packagesFinal
 	if p.window.From > p.window.To {
 		p.window.From = p.window.To
 	}
-	return p
 }
 
 // planConsolidated evaluates every consolidation hub: each source ships to
@@ -214,26 +236,72 @@ func (c *reqCtx) planConsolidated(mode string, dr *network.DestRoutes, cands []c
 		eta int64
 	}
 	var out []scored
+	maxHubs := c.net.Settings.MaxHubsPerPlan
+	if maxHubs <= 0 {
+		maxHubs = 3
+	}
+	// Branch and bound: goods cannot leave a hub before the latest
+	// preparation of the sources, and timings are monotone in the ready
+	// time, so the outbound timing from that instant is a lower bound of
+	// the consolidated promise. Hubs are explored by increasing bound and
+	// pruned once maxHubs plans beat their bound.
+	var maxReady int64
+	for _, ci := range a.sources {
+		if cands[ci].ready > maxReady {
+			maxReady = cands[ci].ready
+		}
+	}
+	type bounded struct {
+		hub *network.Node
+		lb  int64
+	}
+	var hubs []bounded
 	for _, hub := range c.net.ConsolidationHubs {
-		outPaths := dr.ByIdx[hub.Idx]
-		if len(outPaths) == 0 {
+		lb := int64(math.MaxInt64)
+		for _, op := range dr.ByIdx[hub.Idx] {
+			if !c.postalOK(op) {
+				continue
+			}
+			if pt := c.traverse(op, maxReady); pt.ok && pt.window.To < lb {
+				lb = pt.window.To
+			}
+		}
+		if lb != math.MaxInt64 {
+			hubs = append(hubs, bounded{hub, lb})
+		}
+	}
+	sort.Slice(hubs, func(i, j int) bool { return hubs[i].lb < hubs[j].lb })
+	kthBest := func() int64 {
+		if len(out) < maxHubs {
+			return math.MaxInt64
+		}
+		etas := make([]int64, len(out))
+		for i, o := range out {
+			etas[i] = o.eta
+		}
+		sort.Slice(etas, func(i, j int) bool { return etas[i] < etas[j] })
+		return etas[maxHubs-1]
+	}
+	for _, hb := range hubs {
+		if hb.lb > kthBest() {
+			c.stats.HubsPruned++
 			continue
 		}
+		hub := hb.hub
+		outPaths := dr.ByIdx[hub.Idx]
 		h := hub.Hub
 		p := &plan{mode: mode, strategy: StrategyConsolidated, alloc: a, cands: cands, sources: len(a.sources)}
 		cons := &consPlan{hub: hub}
-		var allGroups []group
 		ok := true
 		for si, ci := range a.sources {
 			cd := cands[ci]
 			groups := c.groupsFor(a, si, cands)
-			allGroups = append(allGroups, groups...)
 			var arrival int64
 			if cd.node.ID == hub.ID {
 				arrival = cd.ready // hub is itself a stock point
 				p.cost += prepCost(cd.node, 0)
 			} else {
-				sp := c.bestShipment("INBOUND", cd.node.ID, hub.Inbound[cd.node.Idx], cd.ready, groups, false)
+				sp := c.bestShipment("INBOUND", cd.node.ID, hub.Inbound[cd.node.Idx], cd.ready, groups)
 				if sp == nil {
 					ok = false
 					break
@@ -263,7 +331,7 @@ func (c *reqCtx) planConsolidated(mode string, dr *network.DestRoutes, cands []c
 			continue
 		}
 		cons.ready = recv + int64(h.ConsolidationMinutes)*60
-		outbound := c.bestShipment("OUTBOUND", hub.ID, outPaths, cons.ready, allGroups, false)
+		outbound := c.bestShipment("OUTBOUND", hub.ID, outPaths, cons.ready, a.allGroups)
 		if outbound == nil {
 			continue
 		}
@@ -285,10 +353,6 @@ func (c *reqCtx) planConsolidated(mode string, dr *network.DestRoutes, cands []c
 		}
 		return out[i].p.cost < out[j].p.cost
 	})
-	maxHubs := c.net.Settings.MaxHubsPerPlan
-	if maxHubs <= 0 {
-		maxHubs = 3
-	}
 	var plans []*plan
 	for i := 0; i < len(out) && i < maxHubs; i++ {
 		plans = append(plans, out[i].p)

@@ -142,6 +142,7 @@ type EngineStats struct {
 	Allocations          int    `json:"allocations"`
 	PlansEvaluated       int    `json:"plansEvaluated"`
 	PathsConsidered      int    `json:"pathsConsidered"`
+	HubsPruned           int    `json:"hubsPruned"`
 	RouteCacheHit        bool   `json:"routeCacheHit"`
 	StockVersion         uint64 `json:"stockVersion"`
 	ConfigVersion        uint64 `json:"configVersion"`

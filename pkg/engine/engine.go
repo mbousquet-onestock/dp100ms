@@ -74,6 +74,8 @@ type reqCtx struct {
 	items    []item
 	prep     []int64 // by node index, -1 = not computed
 	colNodes []*network.Node
+	ptPool   []pathTiming
+	legPool  []legTime
 	timings  map[timingKey]*pathTiming
 	weights  model.ScoringWeights
 	stats    model.EngineStats
@@ -284,8 +286,9 @@ func (c *reqCtx) planMode(mode string, allHit *bool) ([]*plan, *model.Unfulfilla
 	}
 	consolidation := c.allowConsolidation(mode)
 	for _, a := range allocs {
-		addPlan(c.planDirect(mode, dr, cands, a, false))
-		addPlan(c.planDirect(mode, dr, cands, a, true))
+		fast, cheap := c.planDirect(mode, dr, cands, a)
+		addPlan(fast)
+		addPlan(cheap)
 		if consolidation && len(a.sources) > 1 {
 			for _, p := range c.planConsolidated(mode, dr, cands, a) {
 				addPlan(p)

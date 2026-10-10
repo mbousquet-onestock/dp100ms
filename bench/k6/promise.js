@@ -37,7 +37,9 @@ const byCategory = {
 const consolidated = new Counter('consolidated_options');
 
 export const options = {
-  discardResponseBodies: false,
+  // bodies are received in full but not converted to JS strings: the
+  // engine metrics come from response headers (keeps k6 CPU low)
+  discardResponseBodies: true,
   summaryTrendStats: ['avg', 'min', 'med', 'p(90)', 'p(95)', 'p(99)', 'max', 'count'],
   thresholds: {
     'http_req_duration{expected_response:true}': [{ threshold: 'p(95)<100', abortOnFail: false }],
@@ -65,8 +67,6 @@ const pool = new SharedArray('baskets', () => {
   return raw.map((b) => ({ body: JSON.stringify(b.request), cat: b.category }));
 });
 
-const calcRe = /"calculationTimeMs":([0-9.]+)/;
-
 export default function () {
   // global iteration counter: every request uses the next basket
   const b = pool[exec.scenario.iterationInTest % pool.length];
@@ -77,14 +77,12 @@ export default function () {
   });
   const ok = check(res, { 'status is 200': (r) => r.status === 200 });
   byCategory[b.cat].add(res.timings.duration);
-  if (ok && res.body) {
-    // light parsing: the load generator must not become the bottleneck
-    const m = calcRe.exec(res.body);
-    if (m) engineTime.add(parseFloat(m[1]));
-    const n = res.body.split('"deliveryMode":').length - 1;
+  if (ok) {
+    engineTime.add(parseFloat(res.headers['X-Calculation-Time-Ms']));
+    const n = parseInt(res.headers['X-Options-Count'], 10);
     optionsCount.add(n);
     noOption.add(n === 0);
-    if (res.body.indexOf('"strategy":"CONSOLIDATED"') >= 0) consolidated.add(1);
+    if ((res.headers['X-Strategies'] || '').indexOf('CONSOLIDATED') >= 0) consolidated.add(1);
   }
 }
 
