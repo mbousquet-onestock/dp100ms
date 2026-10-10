@@ -1,0 +1,6 @@
+.git
+web/node_modules
+web/dist
+bench/results
+docs/screenshots
+data

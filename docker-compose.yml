@@ -1,0 +1,49 @@
+# Local stack: PostgreSQL + API/frontend. `docker compose up -d` then open
+# http://localhost:8080. The database is seeded automatically at first boot
+# (seed 42); `make seed` regenerates it.
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: dp
+      POSTGRES_PASSWORD: dp
+      POSTGRES_DB: dp
+    ports: ["5432:5432"]
+    volumes: [pgdata:/var/lib/postgresql/data]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U dp -d dp"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  app:
+    build: .
+    depends_on:
+      postgres: { condition: service_healthy }
+    environment:
+      DATABASE_URL: postgres://dp:dp@postgres:5432/dp?sslmode=disable
+      ADMIN_TOKEN: ${ADMIN_TOKEN:-dev-admin-token}
+      SEED: ${SEED:-42}
+      PLATFORM: docker
+    ports: ["8080:8080"]
+    restart: unless-stopped
+
+  seed:
+    build: .
+    profiles: [tools]
+    depends_on:
+      postgres: { condition: service_healthy }
+    entrypoint: ["/app/seed"]
+    command: ["-seed", "${SEED:-42}"]
+    environment:
+      DATABASE_URL: postgres://dp:dp@postgres:5432/dp?sslmode=disable
+
+  k6:
+    image: grafana/k6:0.54.0
+    profiles: [tools]
+    network_mode: host
+    volumes: ["./bench:/bench"]
+    working_dir: /bench
+
+volumes:
+  pgdata:

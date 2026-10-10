@@ -1,0 +1,35 @@
+# Build the image and deploy it to Cloud Run (see docs/DEPLOYMENT.md).
+#   gcloud builds submit --config cloudbuild.yaml \
+#     --substitutions=_REGION=europe-west1,_SERVICE=dp100ms,_SQL_INSTANCE=PROJECT:europe-west1:dp100ms,SHORT_SHA=$(git rev-parse --short HEAD)
+# Secrets expected in Secret Manager: dp100ms-admin-token, dp100ms-database-url.
+substitutions:
+  _REGION: europe-west1
+  _SERVICE: dp100ms
+  _REPO: dp100ms
+  _SQL_INSTANCE: ""
+steps:
+  - name: gcr.io/cloud-builders/docker
+    args: ["build", "-t", "${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/${_SERVICE}:$SHORT_SHA", "."]
+  - name: gcr.io/cloud-builders/docker
+    args: ["push", "${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/${_SERVICE}:$SHORT_SHA"]
+  - name: gcr.io/google.com/cloudsdktool/cloud-sdk:slim
+    entrypoint: gcloud
+    args:
+      - run
+      - deploy
+      - ${_SERVICE}
+      - --image=${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/${_SERVICE}:$SHORT_SHA
+      - --region=${_REGION}
+      - --platform=managed
+      - --cpu=2
+      - --memory=1Gi
+      - --concurrency=250
+      - --min-instances=1
+      - --max-instances=10
+      - --cpu-boost
+      - --allow-unauthenticated
+      - --set-env-vars=PLATFORM=cloudrun
+      - --set-secrets=ADMIN_TOKEN=dp100ms-admin-token:latest,DATABASE_URL=dp100ms-database-url:latest
+      - --add-cloudsql-instances=${_SQL_INSTANCE}
+images:
+  - ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/${_SERVICE}:$SHORT_SHA
