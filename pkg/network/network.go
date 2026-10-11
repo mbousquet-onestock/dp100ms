@@ -66,9 +66,6 @@ type Leg struct {
 	ToNode      *Node // nil for CUSTOMER
 	Service     *model.CarrierService
 	Carrier     *model.Carrier
-	PickupCal   *calendar.Cal
-	DeliveryCal *calendar.Cal
-	Departures  []model.TimeOfDay
 	Transit     time.Duration
 	Final       bool
 	zones       map[string]bool // nil = all metropolitan departments
@@ -79,11 +76,13 @@ type Leg struct {
 	MaxItems    int
 	// pricing
 	FromNode     *Node
-	Cards        []*pricing.Card
 	Restrictions []model.Restriction
 	CarbonFactor float64 // g CO2e per kg·km
 	DistanceKm   float64 // hub-bound legs (final legs: FinalDistanceKm)
 	Offers       []*model.AdditionalService
+	// plannings (carrier schedules layered on the service values)
+	DefaultPlan *LegPlan
+	byDept      map[string]*LegPlan
 }
 
 // ServesDept reports whether a final leg covers a department.
@@ -314,17 +313,6 @@ func Compile(s *store.Store) *Network {
 			}
 		}
 		cl := &Leg{Leg: &lg, Idx: len(n.Legs), Service: svc, Carrier: car, Final: final, ToNode: n.Nodes[lg.To]}
-		if lg.Calendar != nil {
-			cl.PickupCal = calendar.Compile(*lg.Calendar)
-		} else {
-			cl.PickupCal = calendar.Compile(svc.PickupCalendar)
-		}
-		cl.DeliveryCal = calendar.Compile(svc.DeliveryCalendar)
-		cl.Departures = append([]model.TimeOfDay(nil), lg.Departures...)
-		if len(cl.Departures) == 0 {
-			cl.Departures = []model.TimeOfDay{svc.Cutoff}
-		}
-		sort.Slice(cl.Departures, func(i, j int) bool { return cl.Departures[i] < cl.Departures[j] })
 		tm := lg.TransitMinutes
 		if tm == 0 {
 			tm = svc.TransitMinutes
@@ -359,6 +347,7 @@ func Compile(s *store.Store) *Network {
 		}
 	}
 	n.attachPricing(s)
+	n.attachSchedules(n.Carriers)
 	for _, r := range s.Routes.All() {
 		if r.Active {
 			n.ExplicitRoutes = append(n.ExplicitRoutes, r)

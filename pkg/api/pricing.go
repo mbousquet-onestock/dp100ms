@@ -3,7 +3,9 @@ package api
 import (
 	"net/http"
 	"sort"
+	"time"
 
+	"github.com/onestock/dp100ms/pkg/calendar"
 	"github.com/onestock/dp100ms/pkg/model"
 	"github.com/onestock/dp100ms/pkg/network"
 	"github.com/onestock/dp100ms/pkg/pricing"
@@ -190,4 +192,71 @@ func (s *Server) putSKU(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, 200, v)
+}
+
+// SchedulePreviewRequest asks which planning applies to a service.
+type SchedulePreviewRequest struct {
+	ServiceID  string    `json:"serviceId"`
+	PostalCode string    `json:"postalCode"`
+	ReadyAt    time.Time `json:"readyAt"`
+}
+
+// schedulePreview shows the effective planning of a carrier service for a
+// destination: layers applied, pickup, departure, delivery window, grids.
+func (s *Server) schedulePreview(w http.ResponseWriter, r *http.Request) {
+	var q SchedulePreviewRequest
+	if !decode(w, r, &q) {
+		return
+	}
+	carrierID := r.PathValue("id")
+	net := s.engine().Network()
+	if _, ok := net.Carriers[carrierID]; !ok {
+		notFound(w, r, "carrier")
+		return
+	}
+	dept, err := network.Dept(q.PostalCode)
+	var errs []fe
+	if err != nil {
+		errs = append(errs, fe{Field: "postalCode", Message: err.Error()})
+	}
+	if q.ReadyAt.IsZero() {
+		errs = append(errs, fe{Field: "readyAt", Message: "required (RFC 3339)"})
+	}
+	// a final leg of the service, or any leg of it
+	var leg *network.Leg
+	for _, l := range net.Legs {
+		if l.ServiceID == q.ServiceID && l.CarrierID == carrierID && (leg == nil || (l.Final && !leg.Final)) {
+			leg = l
+		}
+	}
+	if leg == nil {
+		errs = append(errs, fe{Field: "serviceId", Message: "no active leg uses this service of the carrier"})
+	}
+	if len(errs) > 0 {
+		validationFailed(w, r, errs)
+		return
+	}
+	plan := leg.Plan(dept)
+	clk := calendar.ClockFor(net.Loc)
+	out := map[string]any{
+		"scheduleIds": nz(plan.ScheduleIDs), "legId": leg.ID, "final": leg.Final,
+		"pickupDays": plan.PickupDays, "cutoff": plan.Cutoff, "departures": plan.Departures,
+		"deliveryDays": plan.DeliveryDays, "transitDays": plan.TransitDays,
+		"windowStart": plan.WindowStart, "windowEnd": plan.WindowEnd, "rateCardIds": nz(plan.CardIDs),
+	}
+	dep, ok := clk.NextDeparture(plan.PickupCal, q.ReadyAt.Unix(), plan.Departures, plan.CutoffBefore)
+	if ok {
+		out["departure"] = clk.Time(dep)
+		if leg.Final {
+			day, _ := clk.Split(dep)
+			if dd, ok := clk.AddWorkingDays(plan.DeliveryCal, day, plan.TransitDays); ok {
+				wEnd := plan.WindowEnd
+				if wEnd == 0 {
+					wEnd = 24*60 - 1
+				}
+				out["delivery"] = model.TimeWindow{From: clk.Time(clk.At(dd, plan.WindowStart)), To: clk.Time(clk.At(dd, wEnd))}
+			}
+		}
+	}
+	writeJSON(w, 200, out)
 }

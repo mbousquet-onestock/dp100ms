@@ -221,12 +221,12 @@ func checkInvariants(t testing.TB, f *fixture, r *model.PromiseRequest, resp *mo
 				if lr.EstimatedDeparture.Before(prev) {
 					t.Errorf("%s: leg %s departs %v before previous arrival %v", ctx, lr.LegID, lr.EstimatedDeparture, prev)
 				}
-				if !leg.PickupCal.IsWorking(calendar.DayOf(lr.EstimatedDeparture.In(paris))) {
+				if !leg.Plan(r.Destination.PostalCode[:2]).PickupCal.IsWorking(calendar.DayOf(lr.EstimatedDeparture.In(paris))) {
 					t.Errorf("%s: leg %s departs on a non-working day %v", ctx, lr.LegID, lr.EstimatedDeparture)
 				}
 				dep := model.TimeOfDay(lr.EstimatedDeparture.In(paris).Hour()*60 + lr.EstimatedDeparture.In(paris).Minute())
 				found := false
-				for _, d := range leg.Departures {
+				for _, d := range leg.Plan(r.Destination.PostalCode[:2]).Departures {
 					if d == dep {
 						found = true
 					}
@@ -238,7 +238,7 @@ func checkInvariants(t testing.TB, f *fixture, r *model.PromiseRequest, resp *mo
 					t.Errorf("%s: leg %s arrives before it departs", ctx, lr.LegID)
 				}
 				if leg.Final {
-					if !leg.DeliveryCal.IsWorking(calendar.DayOf(lr.EstimatedArrival.In(paris))) {
+					if !leg.Plan(r.Destination.PostalCode[:2]).DeliveryCal.IsWorking(calendar.DayOf(lr.EstimatedArrival.In(paris))) {
 						t.Errorf("%s: delivery on a non-delivery day %v", ctx, lr.EstimatedArrival)
 					}
 					if !leg.ServesDept(r.Destination.PostalCode[:2]) {

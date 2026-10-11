@@ -105,15 +105,6 @@ func (n *Network) attachPricing(s *store.Store) {
 		}
 	}
 	for _, l := range n.Legs {
-		ids := l.Service.RateCardIDs
-		if len(l.Leg.RateCardIDs) > 0 {
-			ids = l.Leg.RateCardIDs
-		}
-		for _, cid := range ids {
-			if c := n.RateCards[cid]; c != nil {
-				l.Cards = append(l.Cards, c)
-			}
-		}
 		l.Restrictions = append(append([]model.Restriction(nil), l.Service.Restrictions...), l.Leg.Restrictions...)
 		l.CarbonFactor = l.Service.CarbonGramsPerKgKm
 		if l.CarbonFactor == 0 {

@@ -39,11 +39,15 @@ Conditions, derived metrics and `perUnit` rates can use:
 
 ### Where cards apply
 
-| Attached to | Scope | Effect |
-|---|---|---|
-| carrier service (`rateCardIds`) | PARCEL or SHIPMENT | every leg operated with the service |
-| leg (`rateCardIds`) | PARCEL or SHIPMENT | overrides the service cards for that route segment |
-| delivery mode (`priceRateCardIds`) | ORDER | customer price of the option (franco) |
+Cost grids are managed **at the carrier level** and can be refined:
+
+| Attached to | Scope | Effect | Priority |
+|---|---|---|---|
+| leg (`rateCardIds`) | PARCEL or SHIPMENT | one route segment | 1 (highest) |
+| carrier delivery schedule (`schedules[].rateCardIds`) | PARCEL or SHIPMENT | the services / zones of the schedule (e.g. Corsica grid) | 2 |
+| carrier service (`rateCardIds`) | PARCEL or SHIPMENT | every leg operated with the service | 3 |
+| carrier (`rateCardIds`) | PARCEL or SHIPMENT | default of every service of the carrier | 4 |
+| delivery mode (`priceRateCardIds`) | ORDER | customer price of the option (franco) | — |
 
 Without a card producing `cost`, the service `baseCost + costPerKg × weight` is used; without a card producing `carbonKg`, the emission factor `carbonGramsPerKgKm` (or a default per service kind) × weight × distance is used. Preparation and consolidation costs are added to `cost`.
 
@@ -81,6 +85,26 @@ Without a card producing `cost`, the service `baseCost + costPerKg × weight` is
 ```
 
 Test a card without saving it: `POST /api/v1/rate-cards/quote` with `{"card": {…}, "items": [{"sku": "SKU-00001", "quantity": 2}], "vars": {"distanceKm": 400}, "zone": "33"}`; or a saved one with `POST /api/v1/rate-cards/{id}/quote`.
+
+## 1 bis. Carrier delivery schedules (plannings de livraison)
+
+Each carrier holds its delivery schedules (`schedules`): pickup days and **cut-off**, **delivery days**, transit in delivery days (0 = same day), delivery window, holidays and closed dates, and optionally cost grids. A schedule can target some services (`serviceIds`) and/or destination departments (`zones`).
+
+Schedules are **layered** on top of the service values, from the most general to the most specific: carrier-wide → service → zone → service + zone. Each layer only overrides the fields it sets, so a "Corse J+4" zone schedule changes the transit (and the grid) while keeping the cut-off of the national schedule. The cut-off caps the pickup times of the legs: a warehouse pickup scheduled at 20:00 with a 18:00 cut-off leaves at 18:00 (and an order ready after the cut-off waits for the next pickup day).
+
+```json
+{
+  "id": "COLIVIA", "name": "Colivia", "active": true,
+  "rateCardIds": ["RC-COLIVIA-STD"],
+  "schedules": [
+    {"id": "COLIVIA-NATIONAL", "name": "National", "pickupDays": [1,2,3,4,5], "cutoff": "20:00", "deliveryDays": [1,2,3,4,5,6], "honorHolidays": true, "active": true},
+    {"id": "COLIVIA-DOMICILE", "name": "Domicile J+2", "serviceIds": ["COLIVIA-STD"], "transitDays": 2, "windowStart": "09:00", "windowEnd": "18:00", "honorHolidays": true, "active": true},
+    {"id": "COLIVIA-CORSE", "name": "Corse J+4", "zones": ["20"], "transitDays": 4, "deliveryDays": [1,2,3,4,5], "rateCardIds": ["RC-COLIVIA-CORSE"], "honorHolidays": true, "active": true}
+  ]
+}
+```
+
+`POST /api/v1/carriers/{id}/schedule-preview` with `{"serviceId": "COLIVIA-STD", "postalCode": "20000", "readyAt": "2026-10-12T15:00:00+02:00"}` shows the layers applied, the departure, the delivery window and the grids used. In the admin, the carrier screen groups its services, its cost grids and its delivery schedules.
 
 ## 2. Article rules and restrictions
 

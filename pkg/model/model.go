@@ -128,6 +128,42 @@ type Carrier struct {
 	ID     string `json:"id"`
 	Name   string `json:"name"`
 	Active bool   `json:"active"`
+	// RateCardIDs are the default cost grids of every service of the carrier
+	// (a service, a schedule or a leg can override them).
+	RateCardIDs []string `json:"rateCardIds,omitempty"`
+	// Schedules are the delivery plannings of the carrier: pickup days and
+	// cut-off, delivery days, transit and window, per service and per zone.
+	Schedules []DeliverySchedule `json:"schedules,omitempty"`
+}
+
+// DeliverySchedule is a carrier delivery planning. Schedules are layered on
+// top of the service values, from the most general to the most specific:
+// carrier-wide (no services, no zones), service (services, no zones), zone
+// (zones, no services), service + zone. Each layer only overrides the
+// fields it sets (pickup days with holidays and closed dates, cut-off,
+// delivery days, transit days, window, cost grids).
+type DeliverySchedule struct {
+	ID   string `json:"id"`
+	Name string `json:"name"`
+	// ServiceIDs restricts the schedule to some services (empty = all).
+	ServiceIDs []string `json:"serviceIds,omitempty"`
+	// Zones restricts it to destination departments (empty = all). Zones
+	// only apply to legs delivering the customer.
+	Zones []string `json:"zones,omitempty"`
+	// Pickup: days and cut-off (latest handover time for a same-day pickup).
+	PickupDays []int      `json:"pickupDays,omitempty"`
+	Cutoff     *TimeOfDay `json:"cutoff,omitempty"`
+	// Delivery: working days, transit in delivery days (0 = same day) and
+	// delivery window.
+	DeliveryDays  []int      `json:"deliveryDays,omitempty"`
+	TransitDays   *int       `json:"transitDays,omitempty"`
+	WindowStart   *TimeOfDay `json:"windowStart,omitempty"`
+	WindowEnd     *TimeOfDay `json:"windowEnd,omitempty"`
+	HonorHolidays bool       `json:"honorHolidays"`
+	ClosedDates   []string   `json:"closedDates,omitempty"`
+	// RateCardIDs: cost grids specific to this planning (e.g. Corsica).
+	RateCardIDs []string `json:"rateCardIds,omitempty"`
+	Active      bool     `json:"active"`
 }
 
 type ServiceKind string

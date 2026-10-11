@@ -302,3 +302,22 @@ func TestPricingConfigurationEndpoints(t *testing.T) {
 		t.Fatalf("unknown stock view accepted: %d", rec.Code)
 	}
 }
+
+func TestCarrierSchedules(t *testing.T) {
+	s := server(t)
+	rec := call(t, s, "POST", "/api/v1/carriers/COLIVIA/schedule-preview", `{"serviceId":"COLIVIA-STD","postalCode":"20000","readyAt":"2026-10-12T15:00:00+02:00"}`, false)
+	if rec.Code != 200 || !strings.Contains(rec.Body.String(), "COLIVIA-CORSE") || !strings.Contains(rec.Body.String(), `"transitDays":4`) || !strings.Contains(rec.Body.String(), "RC-COLIVIA-CORSE") {
+		t.Fatalf("corsica preview: %d %s", rec.Code, rec.Body)
+	}
+	rec = call(t, s, "POST", "/api/v1/carriers/COLIVIA/schedule-preview", `{"serviceId":"COLIVIA-STD","postalCode":"33000","readyAt":"2026-10-12T15:00:00+02:00"}`, false)
+	if !strings.Contains(rec.Body.String(), `"transitDays":2`) || !strings.Contains(rec.Body.String(), "RC-COLIVIA-STD") {
+		t.Fatalf("national preview: %s", rec.Body)
+	}
+	car := call(t, s, "GET", "/api/v1/carriers/COLIVIA", "", false).Body.String()
+	bad := strings.Replace(car, `"serviceIds":["COLIVIA-STD"]`, `"serviceIds":["EXPRESSO-EXP"]`, 1)
+	bad = strings.Replace(bad, `"cutoff":"20:00"`, `"cutoff":"20:00","pickupDays":[9]`, 1)
+	rec = call(t, s, "PUT", "/api/v1/carriers/COLIVIA", bad, true)
+	if rec.Code != 422 || !strings.Contains(rec.Body.String(), "not a service of carrier COLIVIA") {
+		t.Fatalf("schedule validation: %d %s", rec.Code, rec.Body)
+	}
+}

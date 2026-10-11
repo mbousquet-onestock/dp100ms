@@ -165,3 +165,58 @@ func validateStockView(st *store.Store, v *model.StockView) []fe {
 	}
 	return errs
 }
+
+func checkDays(field string, days []int) []fe {
+	for _, d := range days {
+		if d < 1 || d > 7 {
+			return []fe{{Field: field, Message: "days must be between 1 (Monday) and 7 (Sunday)"}}
+		}
+	}
+	return nil
+}
+
+// validateCarrierPlanning checks the default grids and the schedules.
+func validateCarrierPlanning(st *store.Store, v *model.Carrier) []fe {
+	errs := checkCards(st, "rateCardIds", v.RateCardIDs, false)
+	seen := map[string]bool{}
+	for i := range v.Schedules {
+		sc := &v.Schedules[i]
+		p := fmt.Sprintf("schedules[%d]", i)
+		if sc.ID == "" {
+			sc.ID = fmt.Sprintf("%s-PLAN-%d", v.ID, i+1)
+		}
+		if seen[sc.ID] {
+			errs = append(errs, fe{Field: p + ".id", Message: "duplicate schedule id " + sc.ID})
+		}
+		seen[sc.ID] = true
+		if sc.Name == "" {
+			errs = append(errs, fe{Field: p + ".name", Message: "required"})
+		}
+		for j, sid := range sc.ServiceIDs {
+			svc, ok := st.Services.Get(sid)
+			if !ok || svc.CarrierID != v.ID {
+				errs = append(errs, fe{Field: fmt.Sprintf("%s.serviceIds[%d]", p, j), Message: "not a service of carrier " + v.ID})
+			}
+		}
+		for j, z := range sc.Zones {
+			if len(z) < 2 || len(z) > 3 {
+				errs = append(errs, fe{Field: fmt.Sprintf("%s.zones[%d]", p, j), Message: "department code expected (e.g. 33, 2A → 20)"})
+			}
+		}
+		errs = append(errs, checkDays(p+".pickupDays", sc.PickupDays)...)
+		errs = append(errs, checkDays(p+".deliveryDays", sc.DeliveryDays)...)
+		if sc.TransitDays != nil && (*sc.TransitDays < 0 || *sc.TransitDays > 30) {
+			errs = append(errs, fe{Field: p + ".transitDays", Message: "must be between 0 and 30"})
+		}
+		if sc.WindowStart != nil && sc.WindowEnd != nil && *sc.WindowEnd <= *sc.WindowStart {
+			errs = append(errs, fe{Field: p + ".windowEnd", Message: "must be after windowStart"})
+		}
+		for j, d := range sc.ClosedDates {
+			if len(d) != 10 || d[4] != '-' || d[7] != '-' {
+				errs = append(errs, fe{Field: fmt.Sprintf("%s.closedDates[%d]", p, j), Message: "YYYY-MM-DD expected"})
+			}
+		}
+		errs = append(errs, checkCards(st, p+".rateCardIds", sc.RateCardIDs, false)...)
+	}
+	return errs
+}

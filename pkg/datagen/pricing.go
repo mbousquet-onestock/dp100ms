@@ -140,8 +140,10 @@ func generatePricing(s *store.Store) {
 			Rows:    weightGrid([]float64{0.5, 1, 2, 5, 10, 20, 30}, []float64{4.6, 5.2, 6.1, 7.9, 10.9, 15.5, 21.4}, 0, 0.00025, 0.08),
 			Surcharges: []model.Surcharge{
 				{Label: "Hors gabarit (L + pourtour > 150 cm)", Conditions: map[string]model.Range{"longueurPlusPourtour": rng(150, 0)}, Outputs: map[string]model.Components{model.OutCost: {Fixed: 12}}},
-				{Label: "Corse", Zones: []string{"20"}, Outputs: map[string]model.Components{model.OutCost: {Fixed: 9.5}}},
 			}, Active: true},
+		{ID: "RC-COLIVIA-CORSE", Name: "Colivia Corse — coût", CarrierID: "COLIVIA", Scope: model.ScopeParcel, Currency: "EUR", VolumetricDivisor: 5000, NoMatch: "REJECT",
+			Description: "Grille appliquée par le planning Corse (traversée maritime)",
+			Rows:        weightGrid([]float64{1, 5, 10, 30}, []float64{11.9, 15.8, 21.5, 34.0}, 0, 0.00045, 0.2), Active: true},
 		{ID: "RC-COLIVIA-REG", Name: "Colivia Régional — coût", CarrierID: "COLIVIA", Scope: model.ScopeParcel, Currency: "EUR", VolumetricDivisor: 5000, NoMatch: "REJECT",
 			Rows: weightGrid([]float64{1, 5, 10, 30}, []float64{3.9, 5.4, 7.8, 13.2}, 0, 0.00022, 0.06), Active: true},
 		{ID: "RC-EXPRESSO", Name: "Expresso 13h — coût", CarrierID: "EXPRESSO", Scope: model.ScopeParcel, Currency: "EUR", VolumetricDivisor: 4000, NoMatch: "REJECT",
@@ -218,7 +220,6 @@ func generatePricing(s *store.Store) {
 	noHazmat := model.Restriction{Name: "Matières dangereuses interdites", Mode: model.RestrictExclude, Rules: []model.Rule{{Field: "attributes.hazmat", Op: model.OpExists}}}
 	setup := map[string]func(*model.CarrierService){
 		"COLIVIA-STD": func(v *model.CarrierService) {
-			v.RateCardIDs = []string{"RC-COLIVIA-STD"}
 			v.AdditionalServiceIDs = []string{"INSTALLATION", "FLOOR_DELIVERY", "TAKE_BACK", "APPOINTMENT"}
 			v.Restrictions = []model.Restriction{{Name: "Pourtour max 300 cm", Mode: model.RestrictExclude, Rules: []model.Rule{{Field: "girthCm", Op: model.OpGt, Value: 300}}}}
 			v.Modes = append(v.Modes, "ECO")
@@ -229,37 +230,30 @@ func generatePricing(s *store.Store) {
 			v.Modes = append(v.Modes, "ECO")
 		},
 		"EXPRESSO-EXP": func(v *model.CarrierService) {
-			v.RateCardIDs = []string{"RC-EXPRESSO"}
 			v.Restrictions = []model.Restriction{noHazmat, {Name: "Batteries lithium interdites en aérien", Mode: model.RestrictExclude, Rules: []model.Rule{{Field: "attributes.battery", Op: model.OpEq, Value: "lithium-ion"}}}}
 		},
 		"EXPRESSO-HUB": func(v *model.CarrierService) {
-			v.RateCardIDs = []string{"RC-EXPRESSO"}
 			v.Restrictions = []model.Restriction{noHazmat}
 		},
 		"RELAIS-STD": func(v *model.CarrierService) {
-			v.RateCardIDs = []string{"RC-RELAIS"}
 			v.Restrictions = []model.Restriction{noHazmat, {Name: "Format point relais", Mode: model.RestrictRequire, Rules: []model.Rule{
 				{Field: "longestSideCm", Op: model.OpLte, Value: 100}, {Field: "weightKg", Op: model.OpLte, Value: 20}}}}
 			v.Modes = append(v.Modes, "ECO")
 		},
 		"URBIKE-AM": func(v *model.CarrierService) {
-			v.RateCardIDs = []string{"RC-URBIKE"}
 			v.AdditionalServiceIDs = []string{"APPOINTMENT"}
 			v.Restrictions = []model.Restriction{{Name: "Gabarit vélo-cargo", Mode: model.RestrictRequire, Rules: []model.Rule{
 				{Field: "longestSideCm", Op: model.OpLte, Value: 80}, {Field: "weightKg", Op: model.OpLte, Value: 12}}}}
 			v.Modes = append(v.Modes, "ECO")
 		},
 		"URBIKE-PM": func(v *model.CarrierService) {
-			v.RateCardIDs = []string{"RC-URBIKE"}
 			v.AdditionalServiceIDs = []string{"APPOINTMENT"}
 			v.Restrictions = []model.Restriction{{Name: "Gabarit vélo-cargo", Mode: model.RestrictRequire, Rules: []model.Rule{
 				{Field: "longestSideCm", Op: model.OpLte, Value: 80}, {Field: "weightKg", Op: model.OpLte, Value: 12}}}}
 			v.Modes = append(v.Modes, "ECO")
 		},
-		"URBIKE-SD":   func(v *model.CarrierService) { v.RateCardIDs = []string{"RC-URBIKE-SD"} },
-		"URBIKE-SFS":  func(v *model.CarrierService) { v.RateCardIDs = []string{"RC-URBIKE-SD"} },
-		"TRANSALP-LH": func(v *model.CarrierService) { v.RateCardIDs = []string{"RC-TRANSALP"} },
-		"NAVETTE-REG": func(v *model.CarrierService) { v.RateCardIDs = []string{"RC-NAVETTE"} },
+		"URBIKE-SD":  func(v *model.CarrierService) { v.RateCardIDs = []string{"RC-URBIKE-SD"} },
+		"URBIKE-SFS": func(v *model.CarrierService) { v.RateCardIDs = []string{"RC-URBIKE-SD"} },
 	}
 	for _, sv := range s.Services.All() {
 		if fn, ok := setup[sv.ID]; ok {
@@ -267,6 +261,7 @@ func generatePricing(s *store.Store) {
 			s.Services.LoadRaw(sv)
 		}
 	}
+	generateCarrierPlanning(s)
 	// delivery modes: criteria, stock views, customer prices
 	modeSetup := map[string]func(*model.DeliveryMode){
 		"STANDARD": func(m *model.DeliveryMode) {
@@ -308,4 +303,49 @@ func generatePricing(s *store.Store) {
 		MaxLegs: 3, MaxSources: 2, AllowConsolidation: true, AllowSplit: true, MaxDeliveryDays: 6, Price: 3.9, Active: true,
 		Selection: model.SelectLexicographic, StockViewID: "ALL", PriceRateCardIDs: []string{"PRICE-ECO"},
 		Criteria: []model.Criterion{{Metric: "carbonKg", Weight: 0.7, Priority: 1, Tolerance: 0.05}, {Metric: "packages", Weight: 0.1, Priority: 2}, {Metric: "deliveryHours", Weight: 0.2, Priority: 3}}})
+}
+
+func tp(x string) *model.TimeOfDay { t := model.MustTOD(x); return &t }
+func ip(x int) *int                { return &x }
+
+// generateCarrierPlanning sets the carrier default cost grids and delivery
+// schedules (pickup days, cut-off, delivery days, transit, window, zones).
+func generateCarrierPlanning(s *store.Store) {
+	monFri, monSat, tueSat := []int{1, 2, 3, 4, 5}, []int{1, 2, 3, 4, 5, 6}, []int{2, 3, 4, 5, 6}
+	plans := map[string]struct {
+		cards     []string
+		schedules []model.DeliverySchedule
+	}{
+		"COLIVIA": {[]string{"RC-COLIVIA-STD"}, []model.DeliverySchedule{
+			{ID: "COLIVIA-NATIONAL", Name: "National", PickupDays: monFri, Cutoff: tp("20:00"), DeliveryDays: monSat, HonorHolidays: true, Active: true},
+			{ID: "COLIVIA-DOMICILE", Name: "Domicile J+2", ServiceIDs: []string{"COLIVIA-STD"}, TransitDays: ip(2), WindowStart: tp("09:00"), WindowEnd: tp("18:00"), HonorHolidays: true, Active: true},
+			{ID: "COLIVIA-REGIONAL", Name: "Régional J+1", ServiceIDs: []string{"COLIVIA-REG"}, PickupDays: monSat, TransitDays: ip(1), HonorHolidays: true, Active: true},
+			{ID: "COLIVIA-CORSE", Name: "Corse J+4", Zones: []string{"20"}, TransitDays: ip(4), DeliveryDays: monFri, HonorHolidays: true, RateCardIDs: []string{"RC-COLIVIA-CORSE"}, Active: true},
+			{ID: "COLIVIA-MONTAGNE", Name: "Zones de montagne J+3", Zones: []string{"04", "05", "15", "48", "73"}, ServiceIDs: []string{"COLIVIA-STD"}, TransitDays: ip(3), HonorHolidays: true, Active: true},
+		}},
+		"EXPRESSO": {[]string{"RC-EXPRESSO"}, []model.DeliverySchedule{
+			{ID: "EXPRESSO-NATIONAL", Name: "Express national", PickupDays: monFri, Cutoff: tp("19:00"), DeliveryDays: monFri, HonorHolidays: true, Active: true},
+			{ID: "EXPRESSO-13H", Name: "Avant 13h J+1", ServiceIDs: []string{"EXPRESSO-EXP"}, TransitDays: ip(1), WindowStart: tp("08:00"), WindowEnd: tp("13:00"), HonorHolidays: true, Active: true},
+			{ID: "EXPRESSO-ELOIGNE", Name: "Départements éloignés : après-midi", Zones: []string{"29", "64", "65", "66", "09"}, ServiceIDs: []string{"EXPRESSO-EXP"}, WindowStart: tp("13:00"), WindowEnd: tp("18:00"), HonorHolidays: true, Active: true},
+		}},
+		"RELAISPLUS": {[]string{"RC-RELAIS"}, []model.DeliverySchedule{
+			{ID: "RELAIS-NATIONAL", Name: "Point relais J+2", PickupDays: monFri, Cutoff: tp("19:30"), DeliveryDays: tueSat, TransitDays: ip(2), WindowStart: tp("10:00"), WindowEnd: tp("19:00"), HonorHolidays: true, Active: true},
+		}},
+		"URBIKE": {[]string{"RC-URBIKE"}, []model.DeliverySchedule{
+			{ID: "URBIKE-URBAIN", Name: "Tournées urbaines", PickupDays: monSat, DeliveryDays: monSat, HonorHolidays: true, Active: true},
+		}},
+		"TRANSALP": {[]string{"RC-TRANSALP"}, []model.DeliverySchedule{
+			{ID: "TRANSALP-NUIT", Name: "Traction de nuit", PickupDays: monFri, HonorHolidays: true, Active: true},
+		}},
+		"NAVETTE": {[]string{"RC-NAVETTE"}, []model.DeliverySchedule{
+			{ID: "NAVETTE-JOUR", Name: "Navettes de jour", PickupDays: monSat, HonorHolidays: true, Active: true},
+		}},
+	}
+	for _, c := range s.Carriers.All() {
+		if p, ok := plans[c.ID]; ok {
+			c.RateCardIDs = p.cards
+			c.Schedules = p.schedules
+			s.Carriers.LoadRaw(c)
+		}
+	}
 }

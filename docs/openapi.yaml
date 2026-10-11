@@ -683,6 +683,46 @@ paths:
         '204': { description: Deleted. }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '404': { $ref: '#/components/responses/NotFound' }
+  /carriers/{id}/schedule-preview:
+    post:
+      tags: [Carriers]
+      operationId: previewCarrierSchedule
+      summary: Effective planning of a carrier service for a destination
+      parameters: [{ $ref: '#/components/parameters/id' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [serviceId, postalCode, readyAt]
+              properties:
+                serviceId: { type: string, example: COLIVIA-STD }
+                postalCode: { type: string, example: '20000' }
+                readyAt: { type: string, format: date-time, example: '2026-10-12T15:00:00+02:00' }
+      responses:
+        '200':
+          description: Planning applied.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  scheduleIds: { type: array, items: { type: string }, description: Layers applied, general to specific. }
+                  legId: { type: string }
+                  final: { type: boolean }
+                  pickupDays: { type: array, items: { type: integer } }
+                  cutoff: { $ref: '#/components/schemas/TimeOfDay' }
+                  departures: { type: array, items: { $ref: '#/components/schemas/TimeOfDay' } }
+                  deliveryDays: { type: array, items: { type: integer } }
+                  transitDays: { type: integer }
+                  windowStart: { $ref: '#/components/schemas/TimeOfDay' }
+                  windowEnd: { $ref: '#/components/schemas/TimeOfDay' }
+                  rateCardIds: { type: array, items: { type: string } }
+                  departure: { type: string, format: date-time }
+                  delivery: { $ref: '#/components/schemas/TimeWindow' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/ValidationError' }
   /services:
     get:
       tags: [Carriers]
@@ -1314,6 +1354,30 @@ components:
       properties:
         id: { type: string, example: COLIVIA }
         name: { type: string, example: Colivia }
+        active: { type: boolean }
+        rateCardIds: { type: array, items: { type: string }, description: 'Default cost grids of every service of the carrier (priority: leg > schedule > service > carrier).' }
+        schedules: { type: array, items: { $ref: '#/components/schemas/DeliverySchedule' } }
+    DeliverySchedule:
+      type: object
+      required: [name]
+      description: |
+        Carrier delivery planning. Schedules are layered on the service values from the most general to the most
+        specific: carrier-wide (no services, no zones), service, zone, service + zone. Each layer only overrides the
+        fields it sets. Zones apply to legs delivering the customer. The cut-off caps the pickup times of the legs.
+      properties:
+        id: { type: string, example: COLIVIA-CORSE, description: Generated from the carrier id when empty. }
+        name: { type: string, example: Corse J+4 }
+        serviceIds: { type: array, items: { type: string } }
+        zones: { type: array, items: { type: string }, example: ['20'] }
+        pickupDays: { type: array, items: { type: integer, minimum: 1, maximum: 7 } }
+        cutoff: { $ref: '#/components/schemas/TimeOfDay' }
+        deliveryDays: { type: array, items: { type: integer, minimum: 1, maximum: 7 } }
+        transitDays: { type: integer, minimum: 0, maximum: 30 }
+        windowStart: { $ref: '#/components/schemas/TimeOfDay' }
+        windowEnd: { $ref: '#/components/schemas/TimeOfDay' }
+        honorHolidays: { type: boolean }
+        closedDates: { type: array, items: { type: string, format: date } }
+        rateCardIds: { type: array, items: { type: string } }
         active: { type: boolean }
     ServiceKind: { type: string, enum: [STANDARD, EXPRESS, SAME_DAY, HOME, RELAY, STORE_DELIVERY, LAST_MILE, LINEHAUL, SHUTTLE] }
     CarrierService:

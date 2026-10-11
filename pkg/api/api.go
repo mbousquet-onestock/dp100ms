@@ -229,6 +229,7 @@ func (s *Server) routes() {
 	m.HandleFunc("POST /api/v1/rate-cards/quote", s.quoteRateCard)
 	m.HandleFunc("POST /api/v1/rate-cards/{id}/quote", s.quoteRateCard)
 	m.HandleFunc("GET /api/v1/pricing/fields", s.pricingFields)
+	m.HandleFunc("POST /api/v1/carriers/{id}/schedule-preview", s.schedulePreview)
 	m.HandleFunc("GET /api/v1/stock-views/{id}/preview", s.previewStockView)
 	m.HandleFunc("PUT /api/v1/skus/{sku}", s.admin(s.putSKU))
 

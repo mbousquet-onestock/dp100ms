@@ -162,13 +162,14 @@ func (c *reqCtx) measure(groups []group, parcels []parcel) *measured {
 func (c *reqCtx) legMetrics(l *network.Leg, m *measured, nLegs int, out []float64) bool {
 	dist := c.legDistance(l)
 	cost0, carbon0 := out[pricing.OutCost], out[pricing.OutCarbon]
-	for _, card := range l.Cards {
+	plan := l.Plan(c.dept)
+	for _, card := range plan.Cards {
 		if card.Scope == model.ScopeParcel {
 			for i := range m.parcels {
 				v := m.vars[i]
 				v[pricing.VDistance] = dist
 				v[pricing.VLegs] = float64(nLegs)
-				v[pricing.VTransitDays] = float64(l.Service.TransitDays)
+				v[pricing.VTransitDays] = float64(plan.TransitDays)
 				if !card.Eval(v, c.dept, m.skus[i], out) {
 					return false
 				}
@@ -177,7 +178,7 @@ func (c *reqCtx) legMetrics(l *network.Leg, m *measured, nLegs int, out []float6
 			v := m.total
 			v[pricing.VDistance] = dist
 			v[pricing.VLegs] = float64(nLegs)
-			v[pricing.VTransitDays] = float64(l.Service.TransitDays)
+			v[pricing.VTransitDays] = float64(plan.TransitDays)
 			if !card.Eval(v, c.dept, m.allSkus, out) {
 				return false
 			}
@@ -344,7 +345,7 @@ func (c *reqCtx) shipWindow(p *plan, si int) win {
 	final := s.path.Legs[len(s.path.Legs)-1]
 	day, toSecs := c.clk.Split(w.To)
 	_, fromSecs := c.clk.Split(w.From)
-	nd, ok := c.clk.AddWorkingDays(final.DeliveryCal, day+1, days-1)
+	nd, ok := c.clk.AddWorkingDays(final.Plan(c.dept).DeliveryCal, day+1, days-1)
 	if !ok {
 		return w
 	}

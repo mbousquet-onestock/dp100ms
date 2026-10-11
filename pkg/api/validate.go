@@ -79,12 +79,12 @@ func validateStockPoint(s *store.Store, v *model.StockPoint) []fe {
 	return errs
 }
 
-func validateCarrier(_ *store.Store, v *model.Carrier) []fe {
+func validateCarrier(st *store.Store, v *model.Carrier) []fe {
 	errs := checkID(v.ID)
 	if v.Name == "" {
 		errs = append(errs, fe{Field: "name", Message: "required"})
 	}
-	return errs
+	return append(errs, validateCarrierPlanning(st, v)...)
 }
 
 func validateService(s *store.Store, v *model.CarrierService) []fe {
