@@ -39,14 +39,15 @@ Conditions, derived metrics and `perUnit` rates can use:
 
 ### Where cards apply
 
-Cost grids are managed **at the carrier level** and can be refined:
+Cost grids are managed **at the carrier level**, mainly on its routes (section 1 ter), and can be refined:
 
 | Attached to | Scope | Effect | Priority |
 |---|---|---|---|
 | leg (`rateCardIds`) | PARCEL or SHIPMENT | one route segment | 1 (highest) |
-| carrier delivery schedule (`schedules[].rateCardIds`) | PARCEL or SHIPMENT | the services / zones of the schedule (e.g. Corsica grid) | 2 |
-| carrier service (`rateCardIds`) | PARCEL or SHIPMENT | every leg operated with the service | 3 |
-| carrier (`rateCardIds`) | PARCEL or SHIPMENT | default of every service of the carrier | 4 |
+| carrier route (`costs`, inline grid) | PARCEL or SHIPMENT | the service from the origin zone to the destination zone | 2 |
+| carrier delivery schedule (`schedules[].rateCardIds`) | PARCEL or SHIPMENT | the services / zones of the schedule (e.g. Corsica grid) | 3 |
+| carrier service (`rateCardIds`) | PARCEL or SHIPMENT | every leg operated with the service | 4 |
+| carrier (`rateCardIds`) | PARCEL or SHIPMENT | default of every service of the carrier | 5 |
 | delivery mode (`priceRateCardIds`) | ORDER | customer price of the option (franco) | — |
 
 Without a card producing `cost`, the service `baseCost + costPerKg × weight` is used; without a card producing `carbonKg`, the emission factor `carbonGramsPerKgKm` (or a default per service kind) × weight × distance is used. Preparation and consolidation costs are added to `cost`.
@@ -106,6 +107,49 @@ Schedules are **layered** on top of the service values, from the most general to
 
 `POST /api/v1/carriers/{id}/schedule-preview` with `{"serviceId": "COLIVIA-STD", "postalCode": "20000", "readyAt": "2026-10-12T15:00:00+02:00"}` shows the layers applied, the departure, the delivery window and the grids used. In the admin, the carrier screen groups its services, its cost grids and its delivery schedules.
 
+## 1 ter. Zones and carrier routes (routes transporteur)
+
+This is the main way to configure a carrier, as in the OneStock Delivery screens: **Carrier → Routes → Costs / Attributes / Planning / Metadata**, plus carrier **Restrictions**.
+
+A **zone** (`/api/v1/zones`) is a named set of places: departments (`"*"` = metropolitan France), postal code prefixes and stock points or hubs. Origins match the stock point or hub (by id or postal code); destinations match the customer department (postal code prefixes of a destination zone are matched at department level).
+
+A **carrier route** (`/api/v1/carrier-routes`) links an origin zone to a destination zone for one carrier service:
+
+- `costs`: an inline cost grid (same format as a rate card: rows with conditions on weight, dimensions, item count, order amount…, outputs `cost` = transport cost, `price` = shipping fees, `carbonKg` = carbon footprint, or custom outputs; surcharges; `noMatch`);
+- `transitMinHours` / `transitMaxHours`: transit time from pickup to delivery in elapsed hours (0/0 keeps the service transit in delivery days);
+- `planning`: the weekly planning, per weekday (1 = Monday … 7 = Sunday) the **pickup times** at the origin and the **delivery slot**, with holidays and closed dates (`timezone` is the deployment time zone);
+- `restrictions`: article restrictions of the route (added to those of the carrier, the service and the leg);
+- `metadata`: free key/value pairs (product code, contract…), returned as is;
+- `priority`, `active`.
+
+```json
+{
+  "id": "COLIVIA-STD-FR-FR", "name": "Domicile national", "carrierId": "COLIVIA", "serviceId": "COLIVIA-STD",
+  "originZoneId": "FR", "destinationZoneId": "FR",
+  "costs": {"volumetricDivisor": 5000, "noMatch": "REJECT", "rows": [
+    {"conditions": {"chargeableWeightKg": {"max": 1}}, "outputs": {"cost": {"fixed": 5.2}, "carbonKg": {"fixed": 0.08}}},
+    {"conditions": {"chargeableWeightKg": {"min": 1, "max": 30}}, "outputs": {"cost": {"fixed": 21.4}, "carbonKg": {"fixed": 0.08}}}
+  ]},
+  "transitMinHours": 24, "transitMaxHours": 48,
+  "planning": {"timezone": "Europe/Paris", "honorHolidays": true, "days": [
+    {"weekday": 1, "pickups": ["12:00", "19:00"], "deliveryStart": "09:00", "deliveryEnd": "18:00"},
+    {"weekday": 6, "deliveryStart": "09:00", "deliveryEnd": "18:00"}
+  ]},
+  "metadata": {"codeProduit": "DOM"}, "priority": 0, "active": true
+}
+```
+
+How a route is applied to a leg operated with its service:
+
+1. the route must belong to the leg carrier and service, and its origin zone must contain the leg origin;
+2. for legs delivering the customer, the destination zone must contain the customer department; for hub-bound legs, it must contain the destination hub;
+3. among the matching routes, the highest `priority` wins, then a destination zone naming the department beats `"*"`, then the smallest zone;
+4. the route is the **last layer** of the leg planning, after the carrier schedules (section 1 bis): its planning replaces the pickup times and delivery days and slots, its transit replaces the service transit, its grid replaces the schedule / service / carrier grids (a grid set on the leg itself still wins), its restrictions are added.
+
+Timing with a route: the parcel leaves at the first pickup time of a pickup day after it is ready (minus the leg cut-off margin); it is delivered in the first delivery slot of a delivery day that ends after `departure + transitMaxHours`, and not before `departure + transitMinHours`. Example: pickup Monday 18:00, transit 12 h, slots 05:00-22:00 → delivered Tuesday 05:00-22:00.
+
+`POST /api/v1/carriers/{id}/schedule-preview` returns the route applied (`routeId`, `transitMinHours`, `transitMaxHours`) with the departure and the delivery slot; pass `originId` to choose the origin. Routes do not change the coverage of the service.
+
 ## 2. Article rules and restrictions
 
 Articles have a weight, volume, dimensions (`lengthCm`, `widthCm`, `heightCm`), a price and free **attributes** (`fragile`, `hazmat`, `battery`, `installable`, `bulky`, `collection`… or anything you add with `PUT /api/v1/skus/{sku}`). A rule tests any of them:
@@ -124,7 +168,7 @@ A **restriction** groups rules with a mode:
 - `EXCLUDE_IF_ANY`: the article is refused if it matches any rule (e.g. hazardous goods);
 - `REQUIRE_ALL`: the article is accepted only if it matches every rule (e.g. pick-up point format: longest side ≤ 100 cm and weight ≤ 20 kg).
 
-Restrictions are set on carrier services and, in addition, on legs. A route is used for a parcel only if every leg accepts every article of the parcel. Parcel-level limits (max weight, volume, items per parcel) still apply through packing and through rate cards with `noMatch: "REJECT"`.
+Restrictions are set on carriers (every service and route of the carrier), carrier services, carrier routes and legs; they add up. A route is used for a parcel only if every leg accepts every article of the parcel. Parcel-level limits (max weight, volume, items per parcel) still apply through packing and through rate cards with `noMatch: "REJECT"`.
 
 ## 3. Associated services (livraison, installation…)
 

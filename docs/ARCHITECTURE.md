@@ -171,7 +171,7 @@ The engine never claims global optimality: it returns several good solutions fou
 
 ### Pricing in the search
 
-Rate cards are compiled with the network (one output registry per configuration version). For each candidate path the engine checks the article restrictions of every leg (bitmask of basket items per leg, cached per request), packs the parcels, measures them once per limit set and evaluates the leg cards (PARCEL or SHIPMENT scope); a card with `noMatch: REJECT` can make a path infeasible. Per allocation it keeps the fastest, cheapest and lowest-carbon path of every shipment (plus custom criteria outputs), then adds order-level outputs (customer price cards with franco, requested additional services and their delays) and ranks plans with the delivery mode criteria. Stock views filter candidate points and articles before the beam search. Details: `docs/PRICING.md`.
+Rate cards are compiled with the network (one output registry per configuration version). Zones and carrier routes are compiled at the same time and folded into the per-leg plannings (`LegPlan`, one default plan plus one per destination department when zones differ): a route adds a weekly planning (pickups and slots per weekday), a transit in hours, an inline grid and restrictions, so the hot path only reads the plan of the leg for the request department. For each candidate path the engine checks the article restrictions of every leg (bitmask of basket items per leg, cached per request), packs the parcels, measures them once per limit set and evaluates the leg cards (PARCEL or SHIPMENT scope); a card with `noMatch: REJECT` can make a path infeasible. Per allocation it keeps the fastest, cheapest and lowest-carbon path of every shipment (plus custom criteria outputs), then adds order-level outputs (customer price cards with franco, requested additional services and their delays) and ranks plans with the delivery mode criteria. Stock views filter candidate points and articles before the beam search. Details: `docs/PRICING.md`.
 
 ## 6. Stock consistency and freshness
 
@@ -208,6 +208,5 @@ Profiling-driven improvements and their measured effect are listed in `docs/PERF
 - Volumes are approximated per SKU (no 3D packing); parcels are packed by weight, volume and item count.
 - Delivery windows come from the final service; there is no slot booking.
 - Time zones: one zone per deployment (Europe/Paris by default); per-point time zones are stored but not used for mixed-zone networks.
-- Costs are per parcel and per kg per leg plus handling and consolidation costs; no carrier rate cards by zone or weight band.
 - Heuristic search: see the quality table in section 5.
 - The built-in benchmark on Vercel is capped at 25 s per run and runs inside the function instance (it measures the instance, not Vercel's edge network).
