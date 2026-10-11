@@ -139,3 +139,17 @@ make benchmark-report     # docs/PERFORMANCE.md
 ```
 
 Without Docker: `make dev` runs the API on :8080 with an in-memory dataset and `cd web && npm run dev` serves the frontend on :5173 with a proxy to the API.
+
+## Response time diagnostics
+
+Every response carries headers to tell the engine time from the platform and network time (visible in Postman → Headers or the browser devtools):
+
+| Header | Meaning |
+|---|---|
+| `X-Calculation-Time-Ms`, `Server-Timing: engine` | time spent in the promise engine |
+| `X-Instance-Cold-Start: true`, `Server-Timing: bootstrap` | first request of a new function instance: it paid the bootstrap (dataset generation, database load) |
+| `X-Instance-Uptime-S` | age of the instance that answered |
+| `X-Function-Region` | Vercel region of the function (`VERCEL_REGION`) |
+| `x-vercel-id` (added by Vercel) | `<edge POP>::<function region>::<id>`, e.g. `cdg1::iad1::…` = entered in Paris, executed in Washington |
+
+A Postman TTFB much larger than `X-Calculation-Time-Ms` comes from the network round trip to the function region (about 90-100 ms per round trip between France and the default US region `iad1`), Vercel routing and, on a cold start, the bootstrap (hundreds of ms to seconds). Pin the function next to the users and the database with `"regions": ["fra1"]` (or `["cdg1"]`) in `vercel.json`.

@@ -101,7 +101,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Access-Control-Allow-Origin", "*")
 	w.Header().Set("Access-Control-Allow-Headers", "Authorization, Content-Type")
 	w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS")
-	w.Header().Set("Access-Control-Expose-Headers", "X-Calculation-Time-Ms, X-Options-Count, X-Strategies")
+	w.Header().Set("Access-Control-Expose-Headers", "X-Calculation-Time-Ms, X-Options-Count, X-Strategies, Server-Timing, X-Instance-Cold-Start, X-Instance-Uptime-S, X-Function-Region")
 	if r.Method == http.MethodOptions {
 		w.WriteHeader(http.StatusNoContent)
 		return
@@ -399,6 +399,7 @@ func (s *Server) promise(w http.ResponseWriter, r *http.Request) {
 	}
 	h := w.Header()
 	h.Set("X-Calculation-Time-Ms", strconv.FormatFloat(resp.CalculationTimeMs, 'f', 3, 64))
+	h.Add("Server-Timing", "engine;desc=\"calcul moteur\";dur="+strconv.FormatFloat(resp.CalculationTimeMs, 'f', 3, 64))
 	h.Set("X-Options-Count", strconv.Itoa(len(resp.Options)))
 	strategies := make([]string, 0, 3)
 	for _, o := range resp.Options {
