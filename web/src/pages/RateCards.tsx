@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, errorMessage } from '../api/client';
 import { useCarriers, useCrud, usePricingFields, useQuote, useRateCards } from '../api/hooks';
 import type { Components, DerivedMetric, Range, RateCard, RateRow, RateScope, Surcharge } from '../api/types';
@@ -218,6 +218,18 @@ function Editor({ initial, isNew, onClose, onSaved }: { initial: RateCard; isNew
   }, [v.rows, extraOutputs]);
 
   const fe = (name: string) => errorsUnder(m.error, name, ROOTS)[0]?.message;
+  const qc = useQueryClient();
+  const remove = async () => {
+    try {
+      await api.del(`/rate-cards/${encodeURIComponent(v.id)}`);
+      qc.removeQueries({ queryKey: ['rate-cards', 'one', v.id] });
+      toast('Grille supprimée');
+      onClose();
+      qc.invalidateQueries({ queryKey: ['rate-cards'] });
+    } catch (e) {
+      toast(errorMessage(e), 'error');
+    }
+  };
   const save = () =>
     m.mutate(normalizeCard(v), {
       onSuccess: (saved) => {
@@ -272,7 +284,7 @@ function Editor({ initial, isNew, onClose, onSaved }: { initial: RateCard; isNew
         }
         actions={
           <>
-            {!isNew && <ConfirmButton small={false} onConfirm={() => crud.remove.mutate(v.id, { onSuccess: () => { toast('Grille supprimée'); onClose(); }, onError: (e) => toast(errorMessage(e), 'error') })} label="Supprimer" />}
+            {!isNew && <ConfirmButton small={false} onConfirm={remove} label="Supprimer" />}
             <button className="btn btn-secondary" onClick={() => setV({ ...initial, derived: initial.derived ?? [], surcharges: initial.surcharges ?? [], noMatch: initial.noMatch ?? '' })} disabled={!dirty}>
               Annuler les modifications
             </button>
@@ -348,8 +360,8 @@ function Editor({ initial, isNew, onClose, onSaved }: { initial: RateCard; isNew
             }
           >
             <div className="flex flex-wrap items-center gap-m border-b border-border px-xl py-m">
-              <Alert kind="info" className="flex-1 py-s">
-                Les lignes sont évaluées dans l'ordre : la première ligne dont toutes les conditions correspondent donne les sorties. Une condition [min, max) inclut le minimum et exclut le maximum ; une case vide est ouverte.
+              <Alert kind="info" className="min-w-[280px] flex-1 py-s">
+                L'ordre compte : la première ligne dont toutes les conditions correspondent est retenue. Condition [min, max) : minimum inclus, maximum exclu, case vide = ouverte.
               </Alert>
               <select
                 className="select h-[30px] w-[220px] text-xs"

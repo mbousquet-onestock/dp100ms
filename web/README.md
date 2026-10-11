@@ -36,4 +36,8 @@ src/
 ```
 
 Routes: `/` dashboard, `/simulator`, `/scenarios`, `/stock-points` (+ `/stock-points/:id`), `/network`, `/hubs`,
-`/carriers`, `/delivery-modes`, `/benchmarks`, `/docs` (OpenAPI renderer for `/api/v1/openapi.json`), `/settings`.
+`/carriers`, `/delivery-modes`, `/skus` (articles), `/rate-cards` (+ `?id=` editor with quote simulation), `/additional-services`,
+`/stock-views`, `/benchmarks`, `/docs` (OpenAPI renderer for `/api/v1/openapi.json`), `/settings`.
+
+Shared pricing editors live in `src/components/pricing/`: `RuleBuilder` (article rules and restrictions), `Outputs`
+(rate card components, ranges, outputs list) and `CriteriaEditor` (delivery mode selection criteria).

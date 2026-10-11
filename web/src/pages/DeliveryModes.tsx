@@ -62,13 +62,13 @@ export default function DeliveryModes() {
                       <span className="font-medium">{m.name}</span>
                     </div>
                   </td>
-                  <td className="text-xs text-neutral-700">{m.description}</td>
+                  <td className="min-w-[200px] text-xs text-neutral-700">{m.description}</td>
                   <td className="num">{m.maxLegs}</td>
                   <td className="num">{m.maxSources}</td>
                   <td>{m.allowConsolidation ? <Badge color="green">Autorisée</Badge> : <Badge color="grey">Non</Badge>}</td>
                   <td>{m.allowSplit ? <Badge color="green">Autorisé</Badge> : <Badge color="grey">Non</Badge>}</td>
                   <td className="num">{m.maxDeliveryDays}</td>
-                  <td className="text-xs">
+                  <td className="min-w-[200px] max-w-[260px] text-xs">
                     {m.selection ? <div className="font-medium">{SELECTION_LABEL[m.selection] ?? m.selection}</div> : null}
                     <div className="text-neutral-500">
                       {[...(m.criteria ?? [])]

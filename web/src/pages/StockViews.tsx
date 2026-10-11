@@ -120,18 +120,18 @@ function PreviewCard({ id, view }: { id: string | null; view?: StockView }) {
         <ErrorAlert error={p.error} />
       ) : p.data ? (
         <div className="flex flex-col gap-l" data-testid="stock-view-preview">
-          <div className="grid grid-cols-3 gap-m">
+          <div className="grid grid-cols-3 gap-l">
             <div>
-              <div className="kpi-value">{fmtInt(p.data.stockPoints)}</div>
-              <div className="kpi-label">Points de stock</div>
+              <div className="text-2xl tabular-nums text-neutral-800">{fmtInt(p.data.stockPoints)}</div>
+              <div className="mt-xs text-xs text-neutral-500">Points de stock</div>
             </div>
             <div>
-              <div className="kpi-value">{fmtInt(p.data.skus)}</div>
-              <div className="kpi-label">Articles</div>
+              <div className="text-2xl tabular-nums text-neutral-800">{fmtInt(p.data.skus)}</div>
+              <div className="mt-xs text-xs text-neutral-500">Articles</div>
             </div>
             <div>
-              <div className="kpi-value">{p.data.reserve}</div>
-              <div className="kpi-label">Réserve par ligne</div>
+              <div className="text-2xl tabular-nums text-neutral-800">{p.data.reserve}</div>
+              <div className="mt-xs text-xs text-neutral-500">Réserve par ligne</div>
             </div>
           </div>
           <div>

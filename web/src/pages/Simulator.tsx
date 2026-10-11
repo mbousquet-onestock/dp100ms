@@ -2,15 +2,16 @@ import { useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { ApiError, api, errorMessage } from '../api/client';
-import { qk, useModes, useRunScenario, useScenarios, useSimulate, type Timed } from '../api/hooks';
-import type { PromiseOption, Scenario, SimulationResponse } from '../api/types';
-import { IconBox, IconClock, IconHub, IconMap, IconPlay, IconPlus, IconRoute, IconTrash } from '../components/Icons';
+import { qk, useAdditionalServices, useModes, useRunScenario, useScenarios, useSimulate, useStockViews, type Timed } from '../api/hooks';
+import { CriteriaEditor } from '../components/pricing/CriteriaEditor';
+import type { AlternativesSort, PackageAlternative, PackageResult, PromiseOption, Scenario, SimulationResponse } from '../api/types';
+import { IconBox, IconChevronDown, IconChevronUp, IconClock, IconEuro, IconHub, IconLeaf, IconMap, IconPlay, IconPlus, IconRoute, IconTool, IconTrash } from '../components/Icons';
 import { FlowDiagram } from '../components/sim/FlowDiagram';
 import { JourneyMap } from '../components/sim/JourneyMap';
 import { SkuInput } from '../components/sim/SkuInput';
 import { Alert, Badge, Card, Checkbox, ChipSelect, cx, EmptyState, ErrorAlert, Field, Modal, NumberInput, PageHeader, ScoreBar, Spinner, Switch, useToast } from '../components/ui';
-import { fmtDateTime, fmtInt, fmtMoney, fmtMs, fmtNum, fmtShort, fmtWindow } from '../lib/format';
-import { modeBadge, PACKAGE_COLORS, SHIPMENT_KIND_LABEL, STRATEGY_BADGE, STRATEGY_LABEL, TIMELINE_LABEL, UNAVAILABLE_LABEL } from '../lib/labels';
+import { fmtCarbon, fmtDateTime, fmtInt, fmtKm, fmtMoney, fmtMs, fmtNum, fmtShort, fmtWindow } from '../lib/format';
+import { ADDITIONAL_KIND_LABEL, metricLabel, modeBadge, NODE_BADGE, outputLabel, PACKAGE_COLORS, STOCK_POINT_TYPE_LABEL, SHIPMENT_KIND_LABEL, STRATEGY_BADGE, STRATEGY_LABEL, TIMELINE_LABEL, UNAVAILABLE_LABEL } from '../lib/labels';
 import { fromRequest, loadSimForm, saveSimForm, toRequest, type SimForm } from '../lib/simState';
 
 export default function Simulator() {
@@ -21,6 +22,8 @@ export default function Simulator() {
   const [saveOpen, setSaveOpen] = useState(false);
   const [params, setParams] = useSearchParams();
   const modes = useModes();
+  const views = useStockViews();
+  const extras = useAdditionalServices();
   const scenarios = useScenarios();
   const simulate = useSimulate();
   const runScenario = useRunScenario();
@@ -184,6 +187,57 @@ export default function Simulator() {
                 </div>
               )}
             </div>
+            <div className="mt-l border-t border-border pt-l" data-testid="sim-pricing">
+              <div className="os-title-s mb-m">Prix, services et stock</div>
+              <div className="grid gap-l sm:grid-cols-2">
+                <Field label="Vue de stock" hint="Vide = vue de chaque mode" error={fe.stockViewId}>
+                  <select className={cx('select', fe.stockViewId && 'invalid')} value={form.stockViewId} onChange={(e) => set('stockViewId', e.target.value)} data-testid="sim-stock-view">
+                    <option value="">Vue de chaque mode</option>
+                    {(views.data?.items ?? []).map((v) => (
+                      <option key={v.id} value={v.id}>
+                        {v.name}
+                      </option>
+                    ))}
+                  </select>
+                </Field>
+                <Field label="Montant de commande (€)" hint={form.useOrderAmount ? 'Remplace la somme des prix articles' : 'Somme des prix articles'} error={fe.orderAmount}>
+                  <div className="flex items-center gap-m">
+                    <Switch checked={form.useOrderAmount} onChange={(b) => set('useOrderAmount', b)} />
+                    <NumberInput value={form.useOrderAmount ? form.orderAmount : undefined} step={1} min={0} onChange={(n) => setForm((f) => ({ ...f, orderAmount: n, useOrderAmount: true }))} placeholder="auto" />
+                  </div>
+                </Field>
+                <Field label="Services associés demandés" className="sm:col-span-2" error={Object.entries(fe).find(([k]) => k.startsWith('additionalServices'))?.[1]}>
+                  <ChipSelect options={(extras.data?.items ?? []).filter((x) => x.active).map((x) => x.id)} value={form.additionalServices} onChange={(v) => set('additionalServices', v)} renderLabel={(id) => extras.data?.items.find((x) => x.id === id)?.name ?? id} />
+                </Field>
+              </div>
+            </div>
+            <div className="mt-l border-t border-border pt-l">
+              <Switch checked={form.useAlternatives} onChange={(b) => set('useAlternatives', b)} label="Origines alternatives par colis" />
+              {form.useAlternatives && (
+                <div className="mt-l grid gap-l sm:grid-cols-2">
+                  <Field label="Nombre d'alternatives" hint="1 à 20" error={fe['alternatives.limit']}>
+                    <NumberInput value={form.altLimit} min={1} max={20} onChange={(n) => set('altLimit', n)} />
+                  </Field>
+                  <Field label="Trier par" error={fe['alternatives.sortBy']}>
+                    <select className="select" value={form.altSort} onChange={(e) => set('altSort', e.target.value as AlternativesSort)}>
+                      {(['deliveryHours', 'distanceKm', 'cost', 'carbonKg'] as AlternativesSort[]).map((k) => (
+                        <option key={k} value={k}>
+                          {metricLabel(k)}
+                        </option>
+                      ))}
+                    </select>
+                  </Field>
+                </div>
+              )}
+            </div>
+            <div className="mt-l border-t border-border pt-l">
+              <Switch checked={form.useCriteria} onChange={(b) => set('useCriteria', b)} label="Critères de sélection personnalisés" />
+              {form.useCriteria && (
+                <div className="mt-l">
+                  <CriteriaEditor criteria={form.criteria} selection={form.selection} onChange={(c, sel) => setForm((f) => ({ ...f, criteria: c, selection: sel }))} errors={fe} />
+                </div>
+              )}
+            </div>
             <div className="mt-l flex flex-wrap justify-between gap-m border-t border-border pt-l">
               <button className="btn btn-secondary" onClick={() => setSaveOpen(true)}>
                 Enregistrer comme scénario
@@ -317,14 +371,31 @@ function OptionCard({ o, rank, active, onClick }: { o: PromiseOption; rank: numb
         <IconClock size={18} className="text-neutral-500" />
         {fmtWindow(o.estimatedDelivery.from, o.estimatedDelivery.to)}
       </div>
+      <div className="grid grid-cols-3 gap-m text-xs text-neutral-500" data-testid="option-pricing">
+        <div>
+          <PriceValue o={o} />
+          Prix client
+        </div>
+        <div>
+          <div className="text-s font-medium text-neutral-800">{fmtMoney(o.metrics?.cost ?? o.totalCost, o.currency)}</div>
+          Coût
+        </div>
+        <div>
+          <div className="flex items-center gap-xs text-s font-medium text-neutral-800">
+            <IconLeaf size={14} className="text-neutral-500" />
+            {fmtNum(carbonOf(o), 3)}
+          </div>
+          kg CO2e
+        </div>
+      </div>
       <div className="grid grid-cols-3 gap-m text-xs text-neutral-500">
         <div>
           <div className="text-s font-medium text-neutral-800">{o.packagesBeforeConsolidation !== o.totalPackages ? `${o.packagesBeforeConsolidation} colis → ${o.totalPackages} colis` : `${o.totalPackages} colis`}</div>
           Colis
         </div>
         <div>
-          <div className="text-s font-medium text-neutral-800">{fmtMoney(o.totalCost, o.currency)}</div>
-          Coût
+          <div className="text-s font-medium text-neutral-800">{(o.additionalServices ?? []).filter((x) => x.requested).length || '–'}</div>
+          Services
         </div>
         <div>
           <div className="text-s font-medium text-neutral-800">
@@ -346,13 +417,15 @@ function ComparisonTable({ options, selected, onSelect }: { options: PromiseOpti
           <tr>
             <th>Option</th>
             <th>Mode</th>
-            <th>Stratégie</th>
             <th>Fenêtre promise</th>
             <th className="num">Délai (h)</th>
+            <th className="num">Prix client</th>
+            <th className="num">Coût</th>
+            <th className="num">Carbone (kg CO2e)</th>
             <th className="num">Colis</th>
             <th className="num">Sources</th>
             <th className="num">Legs</th>
-            <th className="num">Coût</th>
+            <th>Stratégie</th>
             <th className="w-[140px]">Score</th>
           </tr>
         </thead>
@@ -363,15 +436,19 @@ function ComparisonTable({ options, selected, onSelect }: { options: PromiseOpti
               <td>
                 <Badge color={modeBadge(o.deliveryMode)}>{o.deliveryMode}</Badge>
               </td>
-              <td>
-                <Badge color={STRATEGY_BADGE[o.strategy] ?? 'grey'}>{STRATEGY_LABEL[o.strategy] ?? o.strategy}</Badge>
-              </td>
               <td className="whitespace-nowrap">{fmtWindow(o.estimatedDelivery.from, o.estimatedDelivery.to)}</td>
               <td className="num">{fmtNum(o.criteria.deliveryHours, 1)}</td>
+              <td className="num">
+                <PriceValue o={o} inline />
+              </td>
+              <td className="num">{fmtMoney(o.metrics?.cost ?? o.totalCost, o.currency)}</td>
+              <td className="num">{fmtNum(carbonOf(o), 3)}</td>
               <td className="num whitespace-nowrap">{o.packagesBeforeConsolidation !== o.totalPackages ? `${o.packagesBeforeConsolidation} → ${o.totalPackages}` : o.totalPackages}</td>
               <td className="num">{o.criteria.sources}</td>
               <td className="num">{o.criteria.legs}</td>
-              <td className="num">{fmtMoney(o.totalCost, o.currency)}</td>
+              <td>
+                <Badge color={STRATEGY_BADGE[o.strategy] ?? 'grey'}>{STRATEGY_LABEL[o.strategy] ?? o.strategy}</Badge>
+              </td>
               <td>
                 <ScoreBar value={o.score} />
               </td>
@@ -392,6 +469,7 @@ function OptionDetail({ o, r }: { o: PromiseOption; r: SimulationResponse }) {
     </span>
   );
   const pkgColor = (pid: string) => PACKAGE_COLORS[Math.max(0, o.packages.findIndex((p) => p.packageId === pid)) % PACKAGE_COLORS.length];
+  const extraLegMetrics = Array.from(new Set(o.shipments.flatMap((s) => s.legs.flatMap((l) => Object.keys(l.metrics ?? {}))))).filter((k) => k !== 'cost' && k !== 'carbonKg' && k !== 'price');
   return (
     <div className="flex flex-col gap-l" data-testid="option-detail">
       <div className="flex flex-wrap items-center gap-m">
@@ -399,18 +477,13 @@ function OptionDetail({ o, r }: { o: PromiseOption; r: SimulationResponse }) {
         <Badge color={modeBadge(o.deliveryMode)}>{o.deliveryMode}</Badge>
         <Badge color={STRATEGY_BADGE[o.strategy] ?? 'grey'}>{STRATEGY_LABEL[o.strategy] ?? o.strategy}</Badge>
         <span className="text-s text-neutral-700">
-          Livraison {fmtWindow(o.estimatedDelivery.from, o.estimatedDelivery.to)} · {fmtMoney(o.totalCost, o.currency)}
+          Livraison {fmtWindow(o.estimatedDelivery.from, o.estimatedDelivery.to)} · coût {fmtMoney(o.metrics?.cost ?? o.totalCost, o.currency)} · prix client {priceText(o)} · {fmtCarbon(carbonOf(o))}
+          {o.stockViewId && <> · vue de stock {o.stockViewId}</>}
         </span>
       </div>
 
-      <div className="grid gap-l 2xl:grid-cols-2">
-        <Card title="Parcours géographique" icon={<IconMap size={20} />}>
-          <JourneyMap option={o} nodes={r.nodes} postalCode={r.request.destination.postalCode} />
-        </Card>
-        <Card title="Schéma des flux" icon={<IconRoute size={20} />}>
-          <FlowDiagram option={o} nodes={r.nodes} />
-        </Card>
-      </div>
+      <MetricsCard o={o} />
+      <ServicesCard o={o} />
 
       <Card title={`Colis (${o.packages.length})`} icon={<IconBox size={20} />} bodyClassName="">
         {o.packages.map((p) => (
@@ -444,9 +517,20 @@ function OptionDetail({ o, r }: { o: PromiseOption; r: SimulationResponse }) {
                 <div className="flex flex-col gap-xs text-s">{p.hubs.length ? p.hubs.map((h) => <span key={h}>{nodeLabel(h)}</span>) : <span className="text-neutral-500">Aucun</span>}</div>
               </div>
             </div>
+            <PackageMetrics p={p} currency={o.currency} />
+            {(p.alternatives ?? []).length > 0 && <AlternativesTable p={p} />}
           </div>
         ))}
       </Card>
+
+      <div className="grid gap-l 2xl:grid-cols-2">
+        <Card title="Parcours géographique" icon={<IconMap size={20} />}>
+          <JourneyMap option={o} nodes={r.nodes} postalCode={r.request.destination.postalCode} />
+        </Card>
+        <Card title="Schéma des flux" icon={<IconRoute size={20} />}>
+          <FlowDiagram option={o} nodes={r.nodes} />
+        </Card>
+      </div>
 
       <Card title="Expéditions et legs" icon={<IconRoute size={20} />} bodyClassName="overflow-x-auto">
         <table className="table">
@@ -460,7 +544,14 @@ function OptionDetail({ o, r }: { o: PromiseOption; r: SimulationResponse }) {
               <th>Service</th>
               <th>Départ</th>
               <th>Arrivée</th>
+              <th className="num">Distance</th>
               <th className="num">Coût</th>
+              <th className="num">Carbone (kg CO2e)</th>
+              {extraLegMetrics.map((k) => (
+                <th key={k} className="num">
+                  {outputLabel(k)}
+                </th>
+              ))}
             </tr>
           </thead>
           <tbody>
@@ -485,7 +576,14 @@ function OptionDetail({ o, r }: { o: PromiseOption; r: SimulationResponse }) {
                   </td>
                   <td className="whitespace-nowrap">{fmtShort(l.estimatedDeparture)}</td>
                   <td className="whitespace-nowrap">{fmtShort(l.estimatedArrival)}</td>
-                  <td className="num">{fmtMoney(l.cost)}</td>
+                  <td className="num whitespace-nowrap">{fmtKm(l.distanceKm)}</td>
+                  <td className="num">{fmtMoney(l.metrics?.cost ?? l.cost)}</td>
+                  <td className="num">{l.metrics?.carbonKg !== undefined ? fmtNum(l.metrics.carbonKg, 3) : '–'}</td>
+                  {extraLegMetrics.map((k) => (
+                    <td key={k} className="num">
+                      {l.metrics?.[k] !== undefined ? fmtNum(l.metrics[k], 2) : '–'}
+                    </td>
+                  ))}
                 </tr>
               )),
             )}
@@ -599,6 +697,232 @@ function OptionDetail({ o, r }: { o: PromiseOption; r: SimulationResponse }) {
           })}
         </ol>
       </Card>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Pricing helpers and blocks
+
+const carbonOf = (o: PromiseOption) => o.metrics?.carbonKg ?? o.criteria.carbonKg ?? 0;
+const priceOf = (o: PromiseOption) => o.metrics?.price ?? o.criteria.price ?? 0;
+/** Part of the customer price coming from requested additional services. */
+const servicesPrice = (o: PromiseOption) => (o.additionalServices ?? []).filter((x) => x.requested).reduce((a, x) => a + (x.metrics?.price ?? 0), 0);
+const priceText = (o: PromiseOption) => (priceOf(o) <= 0.0001 ? 'offert' : fmtMoney(priceOf(o), o.currency));
+
+function PriceValue({ o, inline }: { o: PromiseOption; inline?: boolean }) {
+  const total = priceOf(o);
+  const shipping = total - servicesPrice(o);
+  const free = total <= 0.0001;
+  const freeShipping = !free && shipping <= 0.0001;
+  if (inline)
+    return (
+      <span className="whitespace-nowrap">
+        {free ? <Badge color="green">Offert</Badge> : fmtMoney(total, o.currency)}
+        {freeShipping && <span className="ml-s text-2xs text-neutral-500">livraison offerte</span>}
+      </span>
+    );
+  return (
+    <div className="text-s font-medium text-neutral-800">
+      {free ? <span style={{ color: 'var(--green-1000)' }}>Offert</span> : fmtMoney(total, o.currency)}
+      {freeShipping && <div className="text-2xs font-normal" style={{ color: 'var(--green-1000)' }}>livraison offerte</div>}
+    </div>
+  );
+}
+
+function MetricsCard({ o }: { o: PromiseOption }) {
+  const metrics = o.metrics ?? {};
+  const custom = Object.keys(metrics).filter((k) => !['cost', 'price', 'carbonKg'].includes(k));
+  const total = priceOf(o);
+  const svc = servicesPrice(o);
+  const shipping = total - svc;
+  return (
+    <div className="card px-xl py-l" data-testid="option-metrics">
+      <div className="grid grid-cols-2 gap-x-xl gap-y-l sm:grid-cols-4 lg:grid-cols-6">
+        <div>
+          <div className="text-2xl tabular-nums" style={{ color: total <= 0.0001 ? 'var(--green-1000)' : 'var(--neutral-800)' }}>
+            {total <= 0.0001 ? 'Offert' : fmtMoney(total, o.currency)}
+          </div>
+          <div className="mt-xs flex items-center gap-xs text-xs text-neutral-500">
+            <IconEuro size={14} /> Prix client
+          </div>
+        </div>
+        <div>
+          <div className="text-2xl tabular-nums" style={{ color: shipping <= 0.0001 ? 'var(--green-1000)' : 'var(--neutral-800)' }}>
+            {shipping <= 0.0001 ? 'Offerte' : fmtMoney(shipping, o.currency)}
+          </div>
+          <div className="mt-xs text-xs text-neutral-500">dont livraison{svc > 0 ? ` · services ${fmtMoney(svc, o.currency)}` : ''}</div>
+        </div>
+        <HeadMetric label="Coût transporteur" value={fmtMoney(metrics.cost ?? o.totalCost, o.currency)} />
+        <div>
+          <div className="text-2xl tabular-nums text-neutral-800">{fmtNum(carbonOf(o), 3)}</div>
+          <div className="mt-xs flex items-center gap-xs text-xs text-neutral-500">
+            <IconLeaf size={14} /> Carbone (kg CO2e)
+          </div>
+        </div>
+        <HeadMetric label="Délai (h)" value={fmtNum(o.criteria.deliveryHours, 1)} />
+        {custom.map((k) => (
+          <HeadMetric key={k} label={outputLabel(k)} value={fmtNum(metrics[k], 2)} />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function ServicesCard({ o }: { o: PromiseOption }) {
+  const list = o.additionalServices ?? [];
+  if (!list.length) return null;
+  return (
+    <Card title="Services associés" icon={<IconTool size={20} />} bodyClassName="overflow-x-auto">
+      <table className="table" data-testid="option-services">
+        <thead>
+          <tr>
+            <th>Service</th>
+            <th>Statut</th>
+            <th>Articles concernés</th>
+            <th className="num">Prix client</th>
+            <th className="num">Coût</th>
+            <th className="num">Carbone</th>
+            <th className="num">Jours en plus</th>
+          </tr>
+        </thead>
+        <tbody>
+          {list.map((x) => (
+            <tr key={x.id}>
+              <td>
+                <div className="font-medium">{x.name}</div>
+                <div className="text-xs text-neutral-500">{ADDITIONAL_KIND_LABEL[x.kind] ?? x.kind}</div>
+              </td>
+              <td>{x.requested ? <Badge color="green">Appliqué</Badge> : <Badge color="blue">Proposé</Badge>}</td>
+              <td className="text-xs">{x.items.map((i) => `${i.sku} × ${i.quantity}`).join(', ') || '–'}</td>
+              <td className="num">{x.metrics?.price !== undefined ? (x.metrics.price === 0 ? 'Offert' : fmtMoney(x.metrics.price, o.currency)) : '–'}</td>
+              <td className="num">{x.metrics?.cost !== undefined ? fmtMoney(x.metrics.cost, o.currency) : '–'}</td>
+              <td className="num">{x.metrics?.carbonKg !== undefined ? fmtNum(x.metrics.carbonKg, 3) : '–'}</td>
+              <td className="num">{x.extraDays > 0 ? `+${x.extraDays} j` : '–'}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </Card>
+  );
+}
+
+function PackageMetrics({ p, currency }: { p: PackageResult; currency: string }) {
+  const m = p.metrics ?? {};
+  const custom = Object.keys(m).filter((k) => !['cost', 'price', 'carbonKg'].includes(k));
+  const items: [string, string][] = [
+    ['Délai', `${fmtNum(p.leadTimeHours, 1)} h`],
+    ['Distance', fmtKm(p.distanceKm)],
+    ['Coût', fmtMoney(m.cost, currency)],
+    ['Part du prix client', m.price !== undefined ? fmtMoney(m.price, currency) : '–'],
+    ['Carbone', fmtCarbon(m.carbonKg)],
+    ...custom.map((k) => [outputLabel(k), fmtNum(m[k], 2)] as [string, string]),
+  ];
+  return (
+    <div className="mt-l flex flex-wrap gap-x-2xl gap-y-m rounded-m bg-neutral-20 px-l py-m" data-testid="package-metrics">
+      {items.map(([k, v]) => (
+        <div key={k}>
+          <div className="text-2xs text-neutral-500">{k}</div>
+          <div className="text-s font-medium tabular-nums text-neutral-800">{v}</div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+type AltKey = 'name' | 'city' | 'type' | 'deliveryHours' | 'distanceKm' | 'cost' | 'carbonKg' | 'carriers';
+const ALT_COLS: { key: AltKey; label: string; num?: boolean }[] = [
+  { key: 'name', label: 'Point de stock' },
+  { key: 'city', label: 'Ville' },
+  { key: 'type', label: 'Type' },
+  { key: 'deliveryHours', label: 'Livraison', num: true },
+  { key: 'distanceKm', label: 'Distance', num: true },
+  { key: 'cost', label: 'Coût', num: true },
+  { key: 'carbonKg', label: 'CO2e (kg)', num: true },
+  { key: 'carriers', label: 'Transporteurs' },
+];
+const altValue = (a: PackageAlternative, k: AltKey): string | number => {
+  switch (k) {
+    case 'cost':
+    case 'carbonKg':
+      return a.metrics?.[k] ?? Number.POSITIVE_INFINITY;
+    case 'carriers':
+      return a.carriers.join(', ');
+    case 'name':
+      return a.name || a.stockPointId;
+    default:
+      return a[k];
+  }
+};
+
+function AlternativesTable({ p }: { p: PackageResult }) {
+  const [sort, setSort] = useState<{ key: AltKey; dir: 1 | -1 } | null>(null);
+  const rows = useMemo(() => {
+    const list = [...(p.alternatives ?? [])];
+    if (sort)
+      list.sort((a, b) => {
+        const x = altValue(a, sort.key);
+        const y = altValue(b, sort.key);
+        return (typeof x === 'number' && typeof y === 'number' ? x - y : String(x).localeCompare(String(y), 'fr')) * sort.dir;
+      });
+    return list;
+  }, [p.alternatives, sort]);
+  return (
+    <div className="mt-l" data-testid="alternatives">
+      <div className="os-label mb-s">Origines alternatives ({rows.length})</div>
+      <div className="overflow-x-auto rounded-m border border-border">
+        <table className="table table-compact">
+          <thead>
+            <tr>
+              {ALT_COLS.map((c) => {
+                const on = sort?.key === c.key;
+                return (
+                  <th key={c.key} className={cx(c.num && 'num')} aria-sort={on ? (sort!.dir === 1 ? 'ascending' : 'descending') : 'none'}>
+                    <button
+                      type="button"
+                      className={cx('inline-flex items-center gap-xs font-medium', on ? 'text-neutral-800' : 'text-grey-800')}
+                      onClick={() => setSort(on ? (sort!.dir === 1 ? { key: c.key, dir: -1 } : null) : { key: c.key, dir: 1 })}
+                    >
+                      {c.label}
+                      {on ? sort!.dir === 1 ? <IconChevronUp size={14} /> : <IconChevronDown size={14} /> : null}
+                    </button>
+                  </th>
+                );
+              })}
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((a) => (
+              <tr key={a.stockPointId} className={cx(a.current && 'selected')} data-current={a.current || undefined}>
+                <td>
+                  <div className="flex items-center gap-s">
+                    <span className="font-medium">{a.name || a.stockPointId}</span>
+                    {a.current && <Badge color="primary">Origine retenue</Badge>}
+                  </div>
+                  <div className="text-xs text-neutral-500">{a.stockPointId}</div>
+                </td>
+                <td className="text-xs">{a.city}</td>
+                <td>
+                  <Badge color={NODE_BADGE[a.type] ?? 'grey'}>{STOCK_POINT_TYPE_LABEL[a.type] ?? a.type}</Badge>
+                </td>
+                <td className="num whitespace-nowrap" title={fmtWindow(a.estimatedDelivery.from, a.estimatedDelivery.to)}>
+                  <div>{fmtNum(a.deliveryHours, 1)} h</div>
+                  <div className="text-xs text-neutral-500">
+                    {fmtShort(a.estimatedDelivery.to)} · {a.parcels} colis
+                  </div>
+                </td>
+                <td className="num whitespace-nowrap">{fmtKm(a.distanceKm)}</td>
+                <td className="num">{fmtMoney(a.metrics?.cost)}</td>
+                <td className="num">{a.metrics?.carbonKg !== undefined ? fmtNum(a.metrics.carbonKg, 3) : '–'}</td>
+                <td className="text-xs">
+                  {a.carriers.join(', ')}
+                  <div className="text-neutral-500">via {a.route.map((x) => (x === 'CUSTOMER' ? 'client' : x)).join(' → ')}</div>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }

@@ -343,6 +343,7 @@
 
 /* Leaflet adjustments */
 .leaflet-container {
+  isolation: isolate; /* keep Leaflet panes and controls below the fixed top bar */
   font-family: var(--font-family);
   background: var(--neutral-50);
 }
