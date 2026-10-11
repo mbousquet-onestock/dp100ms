@@ -46,7 +46,11 @@
   },
   {
    "name": "Delivery modes",
-   "description": "Commercial delivery modes."
+   "description": "Commercial delivery modes, their ranking criteria, stock view and customer price."
+  },
+  {
+   "name": "Pricing",
+   "description": "Rate cards (transport cost, customer price, carbon, custom outputs), franco and additional services."
   },
   {
    "name": "Benchmarks",
@@ -372,6 +376,777 @@
      },
      "404": {
       "$ref": "#/components/responses/NotFound"
+     }
+    }
+   }
+  },
+  "/rate-cards": {
+   "get": {
+    "tags": [
+     "Pricing"
+    ],
+    "operationId": "listRateCards",
+    "summary": "List rate cards",
+    "parameters": [
+     {
+      "$ref": "#/components/parameters/page"
+     },
+     {
+      "$ref": "#/components/parameters/pageSize"
+     },
+     {
+      "name": "scope",
+      "in": "query",
+      "schema": {
+       "type": "string",
+       "enum": [
+        "PARCEL",
+        "SHIPMENT",
+        "ORDER"
+       ]
+      }
+     },
+     {
+      "name": "carrierId",
+      "in": "query",
+      "schema": {
+       "type": "string"
+      }
+     },
+     {
+      "$ref": "#/components/parameters/q"
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "Rate cards.",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/RateCardPage"
+        }
+       }
+      }
+     }
+    }
+   },
+   "post": {
+    "tags": [
+     "Pricing"
+    ],
+    "operationId": "createRateCard",
+    "summary": "Create a rate card",
+    "security": [
+     {
+      "bearerAuth": []
+     }
+    ],
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/RateCard"
+       }
+      }
+     }
+    },
+    "responses": {
+     "201": {
+      "description": "Created.",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/RateCard"
+        }
+       }
+      }
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "409": {
+      "$ref": "#/components/responses/Conflict"
+     },
+     "422": {
+      "$ref": "#/components/responses/ValidationError"
+     }
+    }
+   }
+  },
+  "/rate-cards/{id}": {
+   "parameters": [
+    {
+     "$ref": "#/components/parameters/id"
+    }
+   ],
+   "get": {
+    "tags": [
+     "Pricing"
+    ],
+    "operationId": "getRateCard",
+    "summary": "Get a rate card",
+    "responses": {
+     "200": {
+      "description": "Rate card.",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/RateCard"
+        }
+       }
+      }
+     },
+     "404": {
+      "$ref": "#/components/responses/NotFound"
+     }
+    }
+   },
+   "put": {
+    "tags": [
+     "Pricing"
+    ],
+    "operationId": "updateRateCard",
+    "summary": "Replace a rate card",
+    "security": [
+     {
+      "bearerAuth": []
+     }
+    ],
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/RateCard"
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "Updated.",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/RateCard"
+        }
+       }
+      }
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "404": {
+      "$ref": "#/components/responses/NotFound"
+     },
+     "422": {
+      "$ref": "#/components/responses/ValidationError"
+     }
+    }
+   },
+   "delete": {
+    "tags": [
+     "Pricing"
+    ],
+    "operationId": "deleteRateCard",
+    "summary": "Delete a rate card",
+    "security": [
+     {
+      "bearerAuth": []
+     }
+    ],
+    "responses": {
+     "204": {
+      "description": "Deleted."
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "404": {
+      "$ref": "#/components/responses/NotFound"
+     }
+    }
+   }
+  },
+  "/rate-cards/quote": {
+   "post": {
+    "tags": [
+     "Pricing"
+    ],
+    "operationId": "quoteInlineRateCard",
+    "summary": "Evaluate an unsaved rate card",
+    "description": "Test a grid before saving it. Articles are measured as one parcel (bounding box approximation); `vars` override any variable.",
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/QuoteRequest"
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "Outputs.",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/QuoteResponse"
+        }
+       }
+      }
+     },
+     "422": {
+      "$ref": "#/components/responses/ValidationError"
+     }
+    }
+   }
+  },
+  "/rate-cards/{id}/quote": {
+   "post": {
+    "tags": [
+     "Pricing"
+    ],
+    "operationId": "quoteRateCard",
+    "summary": "Evaluate a rate card",
+    "parameters": [
+     {
+      "$ref": "#/components/parameters/id"
+     }
+    ],
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/QuoteRequest"
+       },
+       "example": {
+        "items": [
+         {
+          "sku": "SKU-00001",
+          "quantity": 2
+         }
+        ],
+        "vars": {
+         "distanceKm": 420
+        },
+        "zone": "33"
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "Outputs.",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/QuoteResponse"
+        }
+       }
+      }
+     },
+     "404": {
+      "$ref": "#/components/responses/NotFound"
+     }
+    }
+   }
+  },
+  "/pricing/fields": {
+   "get": {
+    "tags": [
+     "Pricing"
+    ],
+    "operationId": "pricingFields",
+    "summary": "Fields, variables and outputs usable in rules, grids and criteria",
+    "responses": {
+     "200": {
+      "description": "Reference lists.",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "object",
+         "properties": {
+          "articleFields": {
+           "type": "array",
+           "items": {
+            "type": "string"
+           }
+          },
+          "articleAttributes": {
+           "type": "array",
+           "items": {
+            "type": "string"
+           }
+          },
+          "ruleOperators": {
+           "type": "array",
+           "items": {
+            "type": "string"
+           }
+          },
+          "restrictionModes": {
+           "type": "array",
+           "items": {
+            "type": "string"
+           }
+          },
+          "rateVariables": {
+           "type": "array",
+           "items": {
+            "type": "string"
+           }
+          },
+          "rateScopes": {
+           "type": "array",
+           "items": {
+            "type": "string"
+           }
+          },
+          "outputs": {
+           "type": "array",
+           "items": {
+            "type": "string"
+           }
+          },
+          "criteriaMetrics": {
+           "type": "array",
+           "items": {
+            "type": "string"
+           }
+          },
+          "selections": {
+           "type": "array",
+           "items": {
+            "type": "string"
+           }
+          },
+          "additionalServiceKinds": {
+           "type": "array",
+           "items": {
+            "type": "string"
+           }
+          },
+          "warnings": {
+           "type": "array",
+           "items": {
+            "type": "string"
+           },
+           "description": "Rate cards ignored because they do not compile."
+          }
+         }
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/additional-services": {
+   "get": {
+    "tags": [
+     "Pricing"
+    ],
+    "operationId": "listAdditionalServices",
+    "summary": "List additional services",
+    "parameters": [
+     {
+      "$ref": "#/components/parameters/page"
+     },
+     {
+      "$ref": "#/components/parameters/pageSize"
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "Additional services.",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/AdditionalServicePage"
+        }
+       }
+      }
+     }
+    }
+   },
+   "post": {
+    "tags": [
+     "Pricing"
+    ],
+    "operationId": "createAdditionalService",
+    "summary": "Create a additional service",
+    "security": [
+     {
+      "bearerAuth": []
+     }
+    ],
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/AdditionalService"
+       }
+      }
+     }
+    },
+    "responses": {
+     "201": {
+      "description": "Created.",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/AdditionalService"
+        }
+       }
+      }
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "409": {
+      "$ref": "#/components/responses/Conflict"
+     },
+     "422": {
+      "$ref": "#/components/responses/ValidationError"
+     }
+    }
+   }
+  },
+  "/additional-services/{id}": {
+   "parameters": [
+    {
+     "$ref": "#/components/parameters/id"
+    }
+   ],
+   "get": {
+    "tags": [
+     "Pricing"
+    ],
+    "operationId": "getAdditionalService",
+    "summary": "Get a additional service",
+    "responses": {
+     "200": {
+      "description": "Additional service.",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/AdditionalService"
+        }
+       }
+      }
+     },
+     "404": {
+      "$ref": "#/components/responses/NotFound"
+     }
+    }
+   },
+   "put": {
+    "tags": [
+     "Pricing"
+    ],
+    "operationId": "updateAdditionalService",
+    "summary": "Replace a additional service",
+    "security": [
+     {
+      "bearerAuth": []
+     }
+    ],
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/AdditionalService"
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "Updated.",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/AdditionalService"
+        }
+       }
+      }
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "404": {
+      "$ref": "#/components/responses/NotFound"
+     },
+     "422": {
+      "$ref": "#/components/responses/ValidationError"
+     }
+    }
+   },
+   "delete": {
+    "tags": [
+     "Pricing"
+    ],
+    "operationId": "deleteAdditionalService",
+    "summary": "Delete a additional service",
+    "security": [
+     {
+      "bearerAuth": []
+     }
+    ],
+    "responses": {
+     "204": {
+      "description": "Deleted."
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "404": {
+      "$ref": "#/components/responses/NotFound"
+     }
+    }
+   }
+  },
+  "/stock-views": {
+   "get": {
+    "tags": [
+     "Stock"
+    ],
+    "operationId": "listStockViews",
+    "summary": "List stock views",
+    "parameters": [
+     {
+      "$ref": "#/components/parameters/page"
+     },
+     {
+      "$ref": "#/components/parameters/pageSize"
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "Stock views.",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/StockViewPage"
+        }
+       }
+      }
+     }
+    }
+   },
+   "post": {
+    "tags": [
+     "Stock"
+    ],
+    "operationId": "createStockView",
+    "summary": "Create a stock view",
+    "security": [
+     {
+      "bearerAuth": []
+     }
+    ],
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/StockView"
+       }
+      }
+     }
+    },
+    "responses": {
+     "201": {
+      "description": "Created.",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/StockView"
+        }
+       }
+      }
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "409": {
+      "$ref": "#/components/responses/Conflict"
+     },
+     "422": {
+      "$ref": "#/components/responses/ValidationError"
+     }
+    }
+   }
+  },
+  "/stock-views/{id}": {
+   "parameters": [
+    {
+     "$ref": "#/components/parameters/id"
+    }
+   ],
+   "get": {
+    "tags": [
+     "Stock"
+    ],
+    "operationId": "getStockView",
+    "summary": "Get a stock view",
+    "responses": {
+     "200": {
+      "description": "Stock view.",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/StockView"
+        }
+       }
+      }
+     },
+     "404": {
+      "$ref": "#/components/responses/NotFound"
+     }
+    }
+   },
+   "put": {
+    "tags": [
+     "Stock"
+    ],
+    "operationId": "updateStockView",
+    "summary": "Replace a stock view",
+    "security": [
+     {
+      "bearerAuth": []
+     }
+    ],
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/StockView"
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "Updated.",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/StockView"
+        }
+       }
+      }
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "404": {
+      "$ref": "#/components/responses/NotFound"
+     },
+     "422": {
+      "$ref": "#/components/responses/ValidationError"
+     }
+    }
+   },
+   "delete": {
+    "tags": [
+     "Stock"
+    ],
+    "operationId": "deleteStockView",
+    "summary": "Delete a stock view",
+    "security": [
+     {
+      "bearerAuth": []
+     }
+    ],
+    "responses": {
+     "204": {
+      "description": "Deleted."
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "404": {
+      "$ref": "#/components/responses/NotFound"
+     }
+    }
+   }
+  },
+  "/stock-views/{id}/preview": {
+   "get": {
+    "tags": [
+     "Stock"
+    ],
+    "operationId": "previewStockView",
+    "summary": "Stock points and articles selected by a view",
+    "parameters": [
+     {
+      "$ref": "#/components/parameters/id"
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "Preview.",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "object",
+         "properties": {
+          "id": {
+           "type": "string"
+          },
+          "stockPoints": {
+           "type": "integer"
+          },
+          "pointIds": {
+           "type": "array",
+           "items": {
+            "type": "string"
+           }
+          },
+          "skus": {
+           "type": "integer"
+          },
+          "reserve": {
+           "type": "integer"
+          }
+         }
+        }
+       }
+      }
+     },
+     "404": {
+      "$ref": "#/components/responses/NotFound"
+     }
+    }
+   }
+  },
+  "/admin/database": {
+   "get": {
+    "tags": [
+     "Operations"
+    ],
+    "operationId": "databaseStatus",
+    "summary": "Database status",
+    "description": "Persistence mode, seed, stock storage (delta or full) and number of stored stock rows.",
+    "security": [
+     {
+      "bearerAuth": []
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "Status."
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
      }
     }
    }
@@ -982,6 +1757,60 @@
    }
   },
   "/skus/{sku}": {
+   "put": {
+    "tags": [
+     "Catalog"
+    ],
+    "operationId": "updateSku",
+    "summary": "Update an article",
+    "description": "Dimensions, price and free attributes (usable by restrictions, surcharges, stock views and additional services as `attributes.<key>`).",
+    "security": [
+     {
+      "bearerAuth": []
+     }
+    ],
+    "parameters": [
+     {
+      "name": "sku",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     }
+    ],
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/Sku"
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "Updated.",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Sku"
+        }
+       }
+      }
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "404": {
+      "$ref": "#/components/responses/NotFound"
+     },
+     "422": {
+      "$ref": "#/components/responses/ValidationError"
+     }
+    }
+   },
    "get": {
     "tags": [
      "Catalog"
@@ -2897,6 +3726,14 @@
          "seed": {
           "type": "integer",
           "example": 42
+         },
+         "stockStorage": {
+          "type": "string",
+          "enum": [
+           "delta",
+           "full"
+          ],
+          "description": "delta: only changed stock lines are stored (default); full: all 1.2M lines"
          }
         }
        }
@@ -3360,10 +4197,34 @@
      },
      "baseCost": {
       "type": "number",
-      "description": "Cost per parcel (EUR)."
+      "description": "Cost per parcel (EUR), used when no rate card produces a cost."
      },
      "costPerKg": {
       "type": "number"
+     },
+     "rateCardIds": {
+      "type": "array",
+      "items": {
+       "type": "string"
+      },
+      "description": "PARCEL / SHIPMENT rate cards pricing the parcels carried."
+     },
+     "carbonGramsPerKgKm": {
+      "type": "number",
+      "description": "Fallback emission factor when no rate card produces carbonKg."
+     },
+     "restrictions": {
+      "type": "array",
+      "items": {
+       "$ref": "#/components/schemas/Restriction"
+      }
+     },
+     "additionalServiceIds": {
+      "type": "array",
+      "items": {
+       "type": "string"
+      },
+      "description": "Services offered when this service delivers the customer."
      },
      "active": {
       "type": "boolean"
@@ -3521,6 +4382,19 @@
        "type": "string"
       }
      },
+     "rateCardIds": {
+      "type": "array",
+      "items": {
+       "type": "string"
+      },
+      "description": "Override of the service rate cards for this route segment."
+     },
+     "restrictions": {
+      "type": "array",
+      "items": {
+       "$ref": "#/components/schemas/Restriction"
+      }
+     },
      "active": {
       "type": "boolean"
      }
@@ -3601,7 +4475,32 @@
       "description": "Max business days between order and delivery."
      },
      "price": {
-      "type": "number"
+      "type": "number",
+      "description": "Customer price when no price rate card is set."
+     },
+     "criteria": {
+      "type": "array",
+      "items": {
+       "$ref": "#/components/schemas/Criterion"
+      },
+      "description": "Rank the options and pick each shipment's route."
+     },
+     "selection": {
+      "type": "string",
+      "enum": [
+       "WEIGHTED",
+       "LEXICOGRAPHIC"
+      ]
+     },
+     "stockViewId": {
+      "type": "string"
+     },
+     "priceRateCardIds": {
+      "type": "array",
+      "items": {
+       "type": "string"
+      },
+      "description": "ORDER-scope cards computing the price billed to the customer (franco)."
      },
      "active": {
       "type": "boolean"
@@ -3626,6 +4525,26 @@
      },
      "volumeL": {
       "type": "number"
+     },
+     "lengthCm": {
+      "type": "number"
+     },
+     "widthCm": {
+      "type": "number"
+     },
+     "heightCm": {
+      "type": "number"
+     },
+     "priceEur": {
+      "type": "number"
+     },
+     "attributes": {
+      "type": "object",
+      "additionalProperties": true,
+      "example": {
+       "fragile": true,
+       "hazmat": "UN1266"
+      }
      }
     }
    },
@@ -3900,6 +4819,54 @@
      "weights": {
       "$ref": "#/components/schemas/ScoringWeights"
      },
+     "stockViewId": {
+      "type": "string",
+      "description": "Overrides the stock view of the modes."
+     },
+     "additionalServices": {
+      "type": "array",
+      "items": {
+       "type": "string"
+      },
+      "example": [
+       "INSTALLATION"
+      ],
+      "description": "Requested services; options whose delivering carrier cannot provide them are removed."
+     },
+     "orderAmount": {
+      "type": "number",
+      "description": "Order amount for franco and percentage rules (default: Σ article price × quantity)."
+     },
+     "alternatives": {
+      "type": "object",
+      "description": "Ask, for every package, the other stock points able to ship it.",
+      "properties": {
+       "limit": {
+        "type": "integer",
+        "default": 5,
+        "maximum": 20
+       },
+       "sortBy": {
+        "type": "string",
+        "default": "deliveryHours",
+        "description": "deliveryHours, distanceKm, cost, carbonKg or a custom output"
+       }
+      }
+     },
+     "criteria": {
+      "type": "array",
+      "items": {
+       "$ref": "#/components/schemas/Criterion"
+      },
+      "description": "Override of the mode criteria."
+     },
+     "selection": {
+      "type": "string",
+      "enum": [
+       "WEIGHTED",
+       "LEXICOGRAPHIC"
+      ]
+     },
      "debug": {
       "type": "boolean"
      }
@@ -3954,6 +4921,18 @@
      },
      "cost": {
       "type": "number"
+     },
+     "distanceKm": {
+      "type": "number"
+     },
+     "metrics": {
+      "type": "object",
+      "additionalProperties": {
+       "type": "number"
+      },
+      "description": "Outputs of this leg (cost",
+      "carbonKg": null,
+      "custom).": null
      }
     }
    },
@@ -4002,6 +4981,25 @@
      },
      "estimatedDelivery": {
       "$ref": "#/components/schemas/TimeWindow"
+     },
+     "leadTimeHours": {
+      "type": "number"
+     },
+     "distanceKm": {
+      "type": "number"
+     },
+     "metrics": {
+      "type": "object",
+      "additionalProperties": {
+       "type": "number"
+      },
+      "description": "Share of the option outputs carried by this parcel (cost, price, carbonKg…)."
+     },
+     "alternatives": {
+      "type": "array",
+      "items": {
+       "$ref": "#/components/schemas/PackageAlternative"
+      }
      }
     }
    },
@@ -4202,9 +5200,31 @@
        }
       }
      },
+     "metrics": {
+      "type": "object",
+      "additionalProperties": {
+       "type": "number"
+      },
+      "description": "Totals: cost (transport + preparation + consolidation + services), price (billed to the customer), carbonKg, custom outputs."
+     },
+     "additionalServices": {
+      "type": "array",
+      "items": {
+       "$ref": "#/components/schemas/AdditionalServiceResult"
+      }
+     },
+     "stockViewId": {
+      "type": "string"
+     },
      "criteria": {
       "type": "object",
       "properties": {
+       "price": {
+        "type": "number"
+       },
+       "carbonKg": {
+        "type": "number"
+       },
        "deliveryHours": {
         "type": "number"
        },
@@ -4834,6 +5854,655 @@
      },
      "error": {
       "type": "string"
+     }
+    }
+   },
+   "Rule": {
+    "type": "object",
+    "required": [
+     "field",
+     "op"
+    ],
+    "description": "Test on an article field (built-in or `attributes.<key>`).",
+    "properties": {
+     "field": {
+      "type": "string",
+      "example": "attributes.hazmat",
+      "description": "sku, name, category, weightKg, volumeL, lengthCm, widthCm, heightCm, longestSideCm, girthCm, sumDimensionsCm, priceEur or attributes.<key>"
+     },
+     "op": {
+      "type": "string",
+      "enum": [
+       "eq",
+       "neq",
+       "in",
+       "nin",
+       "lt",
+       "lte",
+       "gt",
+       "gte",
+       "between",
+       "exists",
+       "missing",
+       "contains"
+      ]
+     },
+     "value": {
+      "description": "String",
+      "number or boolean.": null
+     },
+     "values": {
+      "type": "array",
+      "items": {},
+      "description": "Values of in / nin, [min, max] of between."
+     }
+    }
+   },
+   "Restriction": {
+    "type": "object",
+    "required": [
+     "name",
+     "mode",
+     "rules"
+    ],
+    "properties": {
+     "name": {
+      "type": "string",
+      "example": "Matières dangereuses interdites"
+     },
+     "mode": {
+      "type": "string",
+      "enum": [
+       "EXCLUDE_IF_ANY",
+       "REQUIRE_ALL"
+      ],
+      "description": "EXCLUDE_IF_ANY refuses an article matching any rule; REQUIRE_ALL accepts only articles matching every rule."
+     },
+     "rules": {
+      "type": "array",
+      "items": {
+       "$ref": "#/components/schemas/Rule"
+      }
+     }
+    }
+   },
+   "Range": {
+    "type": "object",
+    "description": "[min, max) on a variable; omitted bounds are open.",
+    "properties": {
+     "min": {
+      "type": "number"
+     },
+     "max": {
+      "type": "number"
+     }
+    }
+   },
+   "Components": {
+    "type": "object",
+    "description": "One output = fixed + perKg × chargeableWeightKg + perItem × itemCount + perParcel × parcelCount + perKm × distanceKm + perKgKm × weightKg × distanceKm + percentOfValue % × (orderAmount for ORDER scope, goodsValue otherwise) + Σ perUnit[var] × var, clamped to [min, max].",
+    "properties": {
+     "fixed": {
+      "type": "number"
+     },
+     "perKg": {
+      "type": "number"
+     },
+     "perItem": {
+      "type": "number"
+     },
+     "perParcel": {
+      "type": "number"
+     },
+     "perKm": {
+      "type": "number"
+     },
+     "perKgKm": {
+      "type": "number"
+     },
+     "percentOfValue": {
+      "type": "number"
+     },
+     "perUnit": {
+      "type": "object",
+      "additionalProperties": {
+       "type": "number"
+      }
+     },
+     "min": {
+      "type": "number"
+     },
+     "max": {
+      "type": "number"
+     }
+    }
+   },
+   "RateRow": {
+    "type": "object",
+    "description": "The first row whose conditions (and zones) all match gives the outputs.",
+    "properties": {
+     "label": {
+      "type": "string"
+     },
+     "conditions": {
+      "type": "object",
+      "additionalProperties": {
+       "$ref": "#/components/schemas/Range"
+      }
+     },
+     "zones": {
+      "type": "array",
+      "items": {
+       "type": "string"
+      },
+      "description": "Destination departments."
+     },
+     "outputs": {
+      "type": "object",
+      "additionalProperties": {
+       "$ref": "#/components/schemas/Components"
+      },
+      "description": "Keys: cost, price, carbonKg or any custom output."
+     }
+    }
+   },
+   "Surcharge": {
+    "type": "object",
+    "description": "Cumulative addition when its conditions, zones and article rules match.",
+    "properties": {
+     "label": {
+      "type": "string"
+     },
+     "conditions": {
+      "type": "object",
+      "additionalProperties": {
+       "$ref": "#/components/schemas/Range"
+      }
+     },
+     "zones": {
+      "type": "array",
+      "items": {
+       "type": "string"
+      }
+     },
+     "rules": {
+      "type": "array",
+      "items": {
+       "$ref": "#/components/schemas/Rule"
+      },
+      "description": "At least one article of the parcel must match every rule."
+     },
+     "outputs": {
+      "type": "object",
+      "additionalProperties": {
+       "$ref": "#/components/schemas/Components"
+      }
+     }
+    }
+   },
+   "DerivedMetric": {
+    "type": "object",
+    "description": "Linear combination of variables, e.g. length + 2 × width + 2 × height.",
+    "properties": {
+     "key": {
+      "type": "string",
+      "example": "longueurPlusPourtour"
+     },
+     "label": {
+      "type": "string"
+     },
+     "terms": {
+      "type": "array",
+      "items": {
+       "type": "object",
+       "properties": {
+        "var": {
+         "type": "string"
+        },
+        "coef": {
+         "type": "number"
+        }
+       }
+      }
+     }
+    }
+   },
+   "RateCard": {
+    "type": "object",
+    "required": [
+     "id",
+     "name",
+     "scope",
+     "rows"
+    ],
+    "description": "Multi-dimensional tariff grid. Variables: weightKg, volumeL, volumetricWeightKg (L×W×H / volumetricDivisor),\nchargeableWeightKg (max of both), lengthCm / widthCm / heightCm (parcel bounding box, longest first), girthCm,\nsumDimensionsCm, itemCount, parcelCount, orderAmount, goodsValue, distanceKm, legs, transitDays, plus derived metrics.\nAttach PARCEL / SHIPMENT cards to carrier services (`rateCardIds`) or to legs (override), ORDER cards to delivery\nmodes (`priceRateCardIds`) for the customer price and the franco.\n",
+    "properties": {
+     "id": {
+      "type": "string",
+      "example": "RC-COLIVIA-STD"
+     },
+     "name": {
+      "type": "string"
+     },
+     "description": {
+      "type": "string"
+     },
+     "carrierId": {
+      "type": "string"
+     },
+     "scope": {
+      "type": "string",
+      "enum": [
+       "PARCEL",
+       "SHIPMENT",
+       "ORDER"
+      ]
+     },
+     "currency": {
+      "type": "string",
+      "default": "EUR"
+     },
+     "volumetricDivisor": {
+      "type": "number",
+      "example": 5000
+     },
+     "derived": {
+      "type": "array",
+      "items": {
+       "$ref": "#/components/schemas/DerivedMetric"
+      }
+     },
+     "rows": {
+      "type": "array",
+      "items": {
+       "$ref": "#/components/schemas/RateRow"
+      }
+     },
+     "surcharges": {
+      "type": "array",
+      "items": {
+       "$ref": "#/components/schemas/Surcharge"
+      }
+     },
+     "noMatch": {
+      "type": "string",
+      "enum": [
+       "REJECT",
+       "ZERO"
+      ],
+      "description": "REJECT makes the route infeasible when no row matches (parcel outside the grid)."
+     },
+     "active": {
+      "type": "boolean"
+     }
+    }
+   },
+   "QuoteRequest": {
+    "type": "object",
+    "properties": {
+     "card": {
+      "$ref": "#/components/schemas/RateCard"
+     },
+     "items": {
+      "type": "array",
+      "items": {
+       "$ref": "#/components/schemas/BasketItem"
+      }
+     },
+     "vars": {
+      "type": "object",
+      "additionalProperties": {
+       "type": "number"
+      }
+     },
+     "zone": {
+      "type": "string"
+     },
+     "orderAmount": {
+      "type": "number"
+     }
+    }
+   },
+   "QuoteResponse": {
+    "type": "object",
+    "properties": {
+     "cardId": {
+      "type": "string"
+     },
+     "scope": {
+      "type": "string"
+     },
+     "matched": {
+      "type": "boolean"
+     },
+     "vars": {
+      "type": "object",
+      "additionalProperties": {
+       "type": "number"
+      }
+     },
+     "outputs": {
+      "type": "object",
+      "additionalProperties": {
+       "type": "number"
+      }
+     },
+     "warnings": {
+      "type": "array",
+      "items": {
+       "type": "string"
+      }
+     }
+    }
+   },
+   "AdditionalService": {
+    "type": "object",
+    "required": [
+     "id",
+     "name",
+     "outputs"
+    ],
+    "properties": {
+     "id": {
+      "type": "string",
+      "example": "INSTALLATION"
+     },
+     "name": {
+      "type": "string"
+     },
+     "kind": {
+      "type": "string",
+      "enum": [
+       "DELIVERY",
+       "INSTALLATION",
+       "ASSEMBLY",
+       "TAKE_BACK",
+       "APPOINTMENT",
+       "OTHER"
+      ]
+     },
+     "description": {
+      "type": "string"
+     },
+     "appliesTo": {
+      "type": "array",
+      "items": {
+       "$ref": "#/components/schemas/Rule"
+      },
+      "description": "Articles concerned (all when empty)."
+     },
+     "outputs": {
+      "type": "object",
+      "additionalProperties": {
+       "$ref": "#/components/schemas/Components"
+      },
+      "description": "Per order (fixed) and per concerned item (perItem)."
+     },
+     "extraDays": {
+      "type": "integer",
+      "description": "Delay in delivery working days."
+     },
+     "active": {
+      "type": "boolean"
+     }
+    }
+   },
+   "StockView": {
+    "type": "object",
+    "required": [
+     "id",
+     "name"
+    ],
+    "description": "Stock points and articles a delivery mode (or a request) may use.",
+    "properties": {
+     "id": {
+      "type": "string"
+     },
+     "name": {
+      "type": "string"
+     },
+     "description": {
+      "type": "string"
+     },
+     "pointIds": {
+      "type": "array",
+      "items": {
+       "type": "string"
+      }
+     },
+     "pointTypes": {
+      "type": "array",
+      "items": {
+       "type": "string",
+       "enum": [
+        "STORE",
+        "WAREHOUSE",
+        "LAST_MILE_HUB"
+       ]
+      }
+     },
+     "departments": {
+      "type": "array",
+      "items": {
+       "type": "string"
+      },
+      "description": "Postal code prefixes of the stock points."
+     },
+     "excludePointIds": {
+      "type": "array",
+      "items": {
+       "type": "string"
+      }
+     },
+     "articleRules": {
+      "type": "array",
+      "items": {
+       "$ref": "#/components/schemas/Rule"
+      }
+     },
+     "reserve": {
+      "type": "integer",
+      "description": "Units kept back on every line on top of the safety stock."
+     },
+     "active": {
+      "type": "boolean"
+     }
+    }
+   },
+   "Criterion": {
+    "type": "object",
+    "required": [
+     "metric"
+    ],
+    "properties": {
+     "metric": {
+      "type": "string",
+      "example": "carbonKg",
+      "description": "deliveryHours, cost, price, carbonKg, packages, legs, sources or a custom rate card output."
+     },
+     "direction": {
+      "type": "string",
+      "enum": [
+       "MIN",
+       "MAX"
+      ],
+      "default": "MIN"
+     },
+     "weight": {
+      "type": "number"
+     },
+     "priority": {
+      "type": "integer",
+      "description": "1 = most important (LEXICOGRAPHIC selection)."
+     },
+     "max": {
+      "type": "number",
+      "description": "Hard limit; options above it are removed."
+     },
+     "tolerance": {
+      "type": "number",
+      "description": "Values closer than this are considered equal (LEXICOGRAPHIC)."
+     }
+    }
+   },
+   "PackageAlternative": {
+    "type": "object",
+    "properties": {
+     "stockPointId": {
+      "type": "string"
+     },
+     "name": {
+      "type": "string"
+     },
+     "type": {
+      "type": "string"
+     },
+     "city": {
+      "type": "string"
+     },
+     "distanceKm": {
+      "type": "number"
+     },
+     "estimatedDelivery": {
+      "$ref": "#/components/schemas/TimeWindow"
+     },
+     "deliveryHours": {
+      "type": "number"
+     },
+     "parcels": {
+      "type": "integer"
+     },
+     "carriers": {
+      "type": "array",
+      "items": {
+       "type": "string"
+      }
+     },
+     "route": {
+      "type": "array",
+      "items": {
+       "type": "string"
+      }
+     },
+     "metrics": {
+      "type": "object",
+      "additionalProperties": {
+       "type": "number"
+      }
+     },
+     "current": {
+      "type": "boolean"
+     }
+    }
+   },
+   "AdditionalServiceResult": {
+    "type": "object",
+    "properties": {
+     "id": {
+      "type": "string"
+     },
+     "name": {
+      "type": "string"
+     },
+     "kind": {
+      "type": "string"
+     },
+     "requested": {
+      "type": "boolean",
+      "description": "true: applied to the option; false: offered by the delivering carrier."
+     },
+     "items": {
+      "type": "array",
+      "items": {
+       "$ref": "#/components/schemas/BasketItem"
+      }
+     },
+     "extraDays": {
+      "type": "integer"
+     },
+     "metrics": {
+      "type": "object",
+      "additionalProperties": {
+       "type": "number"
+      }
+     }
+    }
+   },
+   "RateCardPage": {
+    "type": "object",
+    "required": [
+     "items",
+     "page",
+     "pageSize",
+     "total"
+    ],
+    "properties": {
+     "items": {
+      "type": "array",
+      "items": {
+       "$ref": "#/components/schemas/RateCard"
+      }
+     },
+     "page": {
+      "type": "integer"
+     },
+     "pageSize": {
+      "type": "integer"
+     },
+     "total": {
+      "type": "integer"
+     }
+    }
+   },
+   "AdditionalServicePage": {
+    "type": "object",
+    "required": [
+     "items",
+     "page",
+     "pageSize",
+     "total"
+    ],
+    "properties": {
+     "items": {
+      "type": "array",
+      "items": {
+       "$ref": "#/components/schemas/AdditionalService"
+      }
+     },
+     "page": {
+      "type": "integer"
+     },
+     "pageSize": {
+      "type": "integer"
+     },
+     "total": {
+      "type": "integer"
+     }
+    }
+   },
+   "StockViewPage": {
+    "type": "object",
+    "required": [
+     "items",
+     "page",
+     "pageSize",
+     "total"
+    ],
+    "properties": {
+     "items": {
+      "type": "array",
+      "items": {
+       "$ref": "#/components/schemas/StockView"
+      }
+     },
+     "page": {
+      "type": "integer"
+     },
+     "pageSize": {
+      "type": "integer"
+     },
+     "total": {
+      "type": "integer"
      }
     }
    },

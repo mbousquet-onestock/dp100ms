@@ -59,6 +59,7 @@ type item struct {
 	qty    int
 	weight float64
 	volume float64
+	sku    *model.SKU
 }
 
 type reqCtx struct {
@@ -80,6 +81,13 @@ type reqCtx struct {
 	weights  model.ScoringWeights
 	stats    model.EngineStats
 	reqID    string
+	// pricing
+	orderAmount float64
+	view        *network.StockView
+	viewItemOK  []bool
+	legMasks    map[int]uint64
+	finalDist   map[int]float64
+	modeCands   map[string][]candidate
 }
 
 const maxUnits = 500
@@ -137,6 +145,30 @@ func (e *Engine) Validate(req *model.PromiseRequest) ([]item, string, error) {
 			errs = append(errs, FieldError{fmt.Sprintf("deliveryModes[%d]", i), "unknown or inactive delivery mode " + m})
 		}
 	}
+	for i, id := range req.AdditionalServices {
+		if _, ok := net.AddServices[id]; !ok {
+			errs = append(errs, FieldError{fmt.Sprintf("additionalServices[%d]", i), "unknown or inactive additional service " + id})
+		}
+	}
+	if req.StockViewID != "" {
+		if _, ok := net.StockViews[req.StockViewID]; !ok {
+			errs = append(errs, FieldError{"stockViewId", "unknown or inactive stock view " + req.StockViewID})
+		}
+	}
+	if req.OrderAmount != nil && *req.OrderAmount < 0 {
+		errs = append(errs, FieldError{"orderAmount", "must be >= 0"})
+	}
+	if a := req.Alternatives; a != nil && (a.Limit < 0 || a.Limit > 20) {
+		errs = append(errs, FieldError{"alternatives.limit", "must be between 1 and 20"})
+	}
+	for i, cr := range req.Criteria {
+		if cr.Weight < 0 {
+			errs = append(errs, FieldError{fmt.Sprintf("criteria[%d].weight", i), "must be >= 0"})
+		}
+		if cr.Direction != "" && cr.Direction != "MIN" && cr.Direction != "MAX" {
+			errs = append(errs, FieldError{fmt.Sprintf("criteria[%d].direction", i), "MIN or MAX"})
+		}
+	}
 	if req.Weights != nil {
 		w := req.Weights
 		if w.DeliveryTime < 0 || w.Packages < 0 || w.Cost < 0 || w.Legs < 0 || w.Sources < 0 {
@@ -150,7 +182,8 @@ func (e *Engine) Validate(req *model.PromiseRequest) ([]item, string, error) {
 	for _, code := range order {
 		idx, _ := e.store.Stock.SKUIndex(code)
 		sku := e.store.Stock.SKU(idx)
-		items = append(items, item{code: code, idx: idx, qty: merged[code], weight: sku.WeightKg, volume: sku.VolumeL})
+		sk := sku
+		items = append(items, item{code: code, idx: idx, qty: merged[code], weight: sku.WeightKg, volume: sku.VolumeL, sku: &sk})
 	}
 	return items, dept, nil
 }
@@ -177,6 +210,14 @@ func (e *Engine) Promise(req *model.PromiseRequest) (*model.PromiseResponse, err
 		weights: net.Settings.Weights, clk: calendar.ClockFor(net.Loc), orderU: req.OrderDate.Unix(),
 	}
 	c.colNodes = net.NodesForColumns(c.sn.PointIDs)
+	c.modeCands = map[string][]candidate{}
+	if req.OrderAmount != nil {
+		c.orderAmount = *req.OrderAmount
+	} else {
+		for _, it := range items {
+			c.orderAmount += it.sku.PriceEur * float64(it.qty)
+		}
+	}
 	if req.Weights != nil {
 		c.weights = *req.Weights
 	}
@@ -201,12 +242,13 @@ func (e *Engine) Promise(req *model.PromiseRequest) (*model.PromiseResponse, err
 			resp.Unavailable = append(resp.Unavailable, *unf)
 			continue
 		}
-		scorePlans(plans, c.weights)
+		c.scorePlans(mode, plans)
 		perMode = append(perMode, plans)
 	}
 	c.stats.RouteCacheHit = allHit
 	selected := selectPlans(perMode, maxOptions)
 	for i, p := range selected {
+		c.setView(p.mode)
 		resp.Options = append(resp.Options, c.buildOption(p, i+1))
 	}
 	elapsed := time.Since(start)
@@ -257,7 +299,9 @@ func (c *reqCtx) planMode(mode string, allHit *bool) ([]*plan, *model.Unfulfilla
 	if dr.Count == 0 {
 		return nil, &model.Unfulfillable{DeliveryMode: mode, Code: "DESTINATION_NOT_SERVED", Reason: fmt.Sprintf("no route serves department %s for mode %s", c.dept, mode)}
 	}
+	c.setView(mode)
 	cands := c.findCandidates(mode, dr)
+	c.modeCands[mode] = cands
 	c.stats.CandidateStockPoints += len(cands)
 	if len(cands) == 0 {
 		return nil, &model.Unfulfillable{DeliveryMode: mode, Code: "NO_STOCK", Reason: "no connected stock point holds the requested items"}
@@ -274,7 +318,7 @@ func (c *reqCtx) planMode(mode string, allHit *bool) ([]*plan, *model.Unfulfilla
 			return
 		}
 		c.stats.PlansEvaluated++
-		if !c.acceptPlan(mode, p) {
+		if !c.finalizePlan(p) || !c.acceptPlan(mode, p) {
 			return
 		}
 		sig := p.signature()
@@ -286,9 +330,9 @@ func (c *reqCtx) planMode(mode string, allHit *bool) ([]*plan, *model.Unfulfilla
 	}
 	consolidation := c.allowConsolidation(mode)
 	for _, a := range allocs {
-		fast, cheap := c.planDirect(mode, dr, cands, a)
-		addPlan(fast)
-		addPlan(cheap)
+		for _, p := range c.planDirect(mode, dr, cands, a) {
+			addPlan(p)
+		}
 		if consolidation && len(a.sources) > 1 {
 			for _, p := range c.planConsolidated(mode, dr, cands, a) {
 				addPlan(p)
@@ -306,7 +350,7 @@ func (c *reqCtx) insufficientReason(cands []candidate) string {
 	for i, it := range c.items {
 		total := 0
 		for _, cd := range cands {
-			total += int(c.sn.Q(i, cd.col))
+			total += c.qty(i, cd.col)
 		}
 		if total < it.qty {
 			short = append(short, fmt.Sprintf("%s (requested %d, promisable %d)", it.code, it.qty, total))
@@ -326,6 +370,9 @@ func (c *reqCtx) acceptPlan(mode string, p *plan) bool {
 		}
 	}
 	if cs := c.req.Constraints; cs != nil && cs.MaxPackages > 0 && p.packagesFinal > cs.MaxPackages {
+		return false
+	}
+	if !c.withinLimits(p) {
 		return false
 	}
 	return true

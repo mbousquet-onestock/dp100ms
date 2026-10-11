@@ -1,9 +1,14 @@
 // Command seed generates the reproducible reference dataset, verifies it and
 // writes it to PostgreSQL (DATABASE_URL) and/or CSV files.
 //
-//	go run ./cmd/seed -seed 42                # verify only (in memory)
-//	DATABASE_URL=postgres://… go run ./cmd/seed  # write to PostgreSQL
-//	go run ./cmd/seed -csv data/              # export CSV
+//	go run ./cmd/seed -seed 42                       # verify only (in memory)
+//	DATABASE_URL=postgres://… go run ./cmd/seed         # (re)initialise PostgreSQL
+//	go run ./cmd/seed -db postgres://… -storage full    # store all 1.2M stock lines
+//	go run ./cmd/seed -db postgres://… -if-empty        # only when the base is empty
+//	go run ./cmd/seed -csv data/                     # export CSV
+//
+// The application performs the same initialisation automatically at its
+// first connection to an empty database.
 package main
 
 import (
@@ -17,9 +22,9 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/onestock/dp100ms/pkg/app"
 	"github.com/onestock/dp100ms/pkg/datagen"
 	"github.com/onestock/dp100ms/pkg/model"
-	"github.com/onestock/dp100ms/pkg/pg"
 	"github.com/onestock/dp100ms/pkg/store"
 )
 
@@ -32,7 +37,10 @@ func main() {
 	flag.IntVar(&cfg.CatalogSize, "catalog", cfg.CatalogSize, "catalog size")
 	flag.IntVar(&cfg.SKUsPerPoint, "skus-per-point", cfg.SKUsPerPoint, "listed SKUs per stock point")
 	csvDir := flag.String("csv", "", "export CSV files to this directory")
-	dbURL := flag.String("db", os.Getenv("DATABASE_URL"), "PostgreSQL URL (default $DATABASE_URL)")
+	_, direct := app.DatabaseURLs()
+	dbURL := flag.String("db", direct, "PostgreSQL URL (default $DATABASE_URL_UNPOOLED, $POSTGRES_URL_NON_POOLING, $DATABASE_URL or $POSTGRES_URL)")
+	storage := flag.String("storage", app.StockStorage(), "stock storage: delta (changed lines only, default) or full (1.2M lines)")
+	ifEmpty := flag.Bool("if-empty", false, "do nothing when the database is already initialised")
 	flag.Parse()
 
 	t0 := time.Now()
@@ -47,20 +55,16 @@ func main() {
 		}
 	}
 	if *dbURL != "" {
-		ctx := context.Background()
-		db, err := pg.Open(ctx, *dbURL)
+		t1 := time.Now()
+		loaded, err := app.InitDatabase(context.Background(), *dbURL, cfg.Seed, *storage, !*ifEmpty)
 		if err != nil {
 			log.Fatalf("database: %v", err)
 		}
-		defer db.Close()
-		if err := db.Migrate(ctx); err != nil {
-			log.Fatalf("migrate: %v", err)
+		if loaded {
+			log.Printf("database initialised in %v (stock storage %s)", time.Since(t1).Round(time.Millisecond), *storage)
+		} else {
+			log.Printf("database already initialised: nothing done")
 		}
-		t1 := time.Now()
-		if err := db.SaveAll(ctx, s, cfg); err != nil {
-			log.Fatalf("save: %v", err)
-		}
-		log.Printf("written to PostgreSQL in %v", time.Since(t1).Round(time.Millisecond))
 	}
 }
 

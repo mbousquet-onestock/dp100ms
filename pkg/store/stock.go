@@ -159,14 +159,22 @@ func (s *Stock) refreshBit(k, p int) {
 
 func (s *Stock) Version() uint64 { return s.version.Load() }
 
-func (s *Stock) SKUs() []model.SKU { return s.skus }
+func (s *Stock) SKUs() []model.SKU {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.skus
+}
 
 func (s *Stock) SKUIndex(code string) (int32, bool) {
 	i, ok := s.skuIdx[code]
 	return i, ok
 }
 
-func (s *Stock) SKU(i int32) model.SKU { return s.skus[i] }
+func (s *Stock) SKU(i int32) model.SKU {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.skus[i]
+}
 
 func (s *Stock) PointIDs() []string {
 	s.mu.RLock()
@@ -484,4 +492,19 @@ func (s *Stock) ForEachLine(fn func(l model.StockLine)) {
 			}
 		}
 	}
+}
+
+// UpdateSKU replaces the description of a catalog article.
+func (s *Stock) UpdateSKU(v model.SKU) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	k, ok := s.skuIdx[v.Code]
+	if !ok {
+		return ErrUnknownSKU
+	}
+	skus := append([]model.SKU(nil), s.skus...) // copy-on-write: readers keep their slice
+	skus[k] = v
+	s.skus = skus
+	s.version.Add(1)
+	return nil
 }

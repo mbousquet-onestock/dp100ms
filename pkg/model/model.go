@@ -177,7 +177,17 @@ type CarrierService struct {
 	DailyCapacity    int       `json:"dailyCapacity"`
 	BaseCost         float64   `json:"baseCost"`
 	CostPerKg        float64   `json:"costPerKg"`
-	Active           bool      `json:"active"`
+	// RateCardIDs price every parcel / shipment carried by this service
+	// (cost, customer price, carbon or custom outputs). Without a card,
+	// BaseCost + CostPerKg × weight is used.
+	RateCardIDs []string `json:"rateCardIds,omitempty"`
+	// CarbonGramsPerKgKm is the fallback emission factor.
+	CarbonGramsPerKgKm float64 `json:"carbonGramsPerKgKm,omitempty"`
+	// Restrictions on the articles the service can carry.
+	Restrictions []Restriction `json:"restrictions,omitempty"`
+	// AdditionalServiceIDs offered when this service delivers the customer.
+	AdditionalServiceIDs []string `json:"additionalServiceIds,omitempty"`
+	Active               bool     `json:"active"`
 }
 
 type HubKind string
@@ -244,8 +254,12 @@ type Leg struct {
 	ExtraCost   float64 `json:"extraCost"`
 	MaxWeightKg float64 `json:"maxWeightKg,omitempty"`
 	// Modes override the service modes for final legs.
-	Modes  []string `json:"modes,omitempty"`
-	Active bool     `json:"active"`
+	Modes []string `json:"modes,omitempty"`
+	// RateCardIDs override the service rate cards for this route segment.
+	RateCardIDs []string `json:"rateCardIds,omitempty"`
+	// Restrictions add article restrictions to the service ones.
+	Restrictions []Restriction `json:"restrictions,omitempty"`
+	Active       bool          `json:"active"`
 }
 
 // Route is an explicit, named multi-leg template. The engine also discovers
@@ -270,7 +284,17 @@ type DeliveryMode struct {
 	AllowSplit         bool    `json:"allowSplit"`
 	MaxDeliveryDays    int     `json:"maxDeliveryDays"`
 	Price              float64 `json:"price"`
-	Active             bool    `json:"active"`
+	// Criteria rank the options (and pick each shipment's path) for the
+	// customer: weighted sum or lexicographic by priority.
+	Criteria  []Criterion `json:"criteria,omitempty"`
+	Selection string      `json:"selection,omitempty"` // WEIGHTED | LEXICOGRAPHIC
+	// StockViewID restricts the stock points and articles used.
+	StockViewID string `json:"stockViewId,omitempty"`
+	// PriceRateCardIDs compute the amount billed to the customer (ORDER
+	// scope, e.g. free shipping above an order amount). Without a card the
+	// mode Price is billed.
+	PriceRateCardIDs []string `json:"priceRateCardIds,omitempty"`
+	Active           bool     `json:"active"`
 }
 
 // SKU describes a catalog article.
@@ -280,6 +304,13 @@ type SKU struct {
 	Category string  `json:"category"`
 	WeightKg float64 `json:"weightKg"`
 	VolumeL  float64 `json:"volumeL"`
+	LengthCm float64 `json:"lengthCm"`
+	WidthCm  float64 `json:"widthCm"`
+	HeightCm float64 `json:"heightCm"`
+	PriceEur float64 `json:"priceEur"`
+	// Attributes are free article attributes usable in rules
+	// ("attributes.fragile", "attributes.hazmat"…).
+	Attributes map[string]any `json:"attributes,omitempty"`
 }
 
 // StockLine is the stock of one SKU in one stock point.

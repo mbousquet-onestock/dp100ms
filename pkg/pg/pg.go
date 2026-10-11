@@ -25,16 +25,19 @@ import (
 var migrations embed.FS
 
 var tables = map[string]string{
-	"stock_point":   "stock_points",
-	"carrier":       "carriers",
-	"service":       "carrier_services",
-	"hub":           "hubs",
-	"leg":           "legs",
-	"route":         "routes",
-	"delivery_mode": "delivery_modes",
-	"scenario":      "scenarios",
-	"benchmark":     "benchmarks",
-	"settings":      "settings",
+	"stock_point":        "stock_points",
+	"carrier":            "carriers",
+	"service":            "carrier_services",
+	"hub":                "hubs",
+	"leg":                "legs",
+	"route":              "routes",
+	"delivery_mode":      "delivery_modes",
+	"scenario":           "scenarios",
+	"benchmark":          "benchmarks",
+	"settings":           "settings",
+	"rate_card":          "rate_cards",
+	"additional_service": "additional_services",
+	"stock_view":         "stock_views",
 }
 
 // DB implements store.Persister.
@@ -48,6 +51,11 @@ func Open(ctx context.Context, url string) (*DB, error) {
 		return nil, err
 	}
 	cfg.MaxConns = 8
+	// Transaction poolers (PgBouncer, Neon "-pooler" endpoints) do not keep
+	// prepared statements between transactions: use the simple protocol.
+	if strings.Contains(cfg.ConnConfig.Host, "-pooler") || strings.Contains(url, "pgbouncer=true") {
+		cfg.ConnConfig.DefaultQueryExecMode = pgx.QueryExecModeSimpleProtocol
+	}
 	pool, err := pgxpool.NewWithConfig(ctx, cfg)
 	if err != nil {
 		return nil, err
@@ -151,100 +159,191 @@ func (d *DB) SaveStockLines(lines []model.StockLine) error {
 	return d.Pool.SendBatch(ctx, batch).Close()
 }
 
-// IsEmpty reports whether the dataset has never been seeded.
+// IsEmpty reports whether the dataset has never been initialised.
 func (d *DB) IsEmpty(ctx context.Context) (bool, error) {
 	var n int
-	if err := d.Pool.QueryRow(ctx, `SELECT count(*) FROM skus`).Scan(&n); err != nil {
+	if err := d.Pool.QueryRow(ctx, `SELECT count(*) FROM dataset_meta`).Scan(&n); err != nil {
 		return false, err
 	}
 	return n == 0, nil
 }
 
-// SaveAll replaces the whole dataset (seed). Stock lines use COPY.
-func (d *DB) SaveAll(ctx context.Context, s *store.Store, cfg any) error {
+// Meta describes the stored dataset.
+type Meta struct {
+	Seed          int64      `json:"seed"`
+	StockMode     string     `json:"stockMode"`
+	GeneratedAt   time.Time  `json:"generatedAt"`
+	InitializedAt *time.Time `json:"initializedAt,omitempty"`
+	StockRows     int        `json:"stockRows"`
+}
+
+func (d *DB) Meta(ctx context.Context) (*Meta, error) {
+	m := &Meta{}
+	err := d.Pool.QueryRow(ctx, `SELECT seed, stock_mode, generated_at, initialized_at FROM dataset_meta WHERE id = 1`).Scan(&m.Seed, &m.StockMode, &m.GeneratedAt, &m.InitializedAt)
+	if err != nil {
+		return nil, err
+	}
+	_ = d.Pool.QueryRow(ctx, `SELECT count(*) FROM stock_lines`).Scan(&m.StockRows)
+	return m, nil
+}
+
+// WithInitLock runs fn while holding a session advisory lock, so that a
+// single process initialises an empty database even when several
+// serverless instances start at the same time.
+func (d *DB) WithInitLock(ctx context.Context, fn func() error) error {
+	conn, err := d.Pool.Acquire(ctx)
+	if err != nil {
+		return err
+	}
+	defer conn.Release()
+	if _, err := conn.Exec(ctx, `SELECT pg_advisory_lock(727100042)`); err != nil {
+		return err
+	}
+	defer conn.Exec(context.Background(), `SELECT pg_advisory_unlock(727100042)`) //nolint:errcheck
+	return fn()
+}
+
+const (
+	StockFull  = "full"
+	StockDelta = "delta"
+)
+
+var entityTables = []string{"stock_points", "carriers", "carrier_services", "hubs", "legs", "routes", "delivery_modes",
+	"scenarios", "rate_cards", "additional_services", "stock_views"}
+
+func docRows[T any](items []T, id func(T) string) ([][]any, error) {
+	rows := make([][]any, 0, len(items))
+	for _, it := range items {
+		b, err := json.Marshal(it)
+		if err != nil {
+			return nil, err
+		}
+		rows = append(rows, []any{id(it), b})
+	}
+	return rows, nil
+}
+
+// SaveAll replaces the whole dataset. In "full" mode every stock line is
+// copied; in "delta" mode only the configuration and the catalog are
+// stored and the stock baseline is regenerated from the seed at load time.
+func (d *DB) SaveAll(ctx context.Context, s *store.Store, cfg any, stockMode string) error {
+	if stockMode != StockDelta {
+		stockMode = StockFull
+	}
 	tx, err := d.Pool.Begin(ctx)
 	if err != nil {
 		return err
 	}
 	defer tx.Rollback(ctx) //nolint:errcheck
-	if _, err := tx.Exec(ctx, `TRUNCATE stock_lines, skus, stock_points, carriers, carrier_services, hubs, legs, routes, delivery_modes, scenarios, settings, dataset_meta`); err != nil {
+	if _, err := tx.Exec(ctx, `TRUNCATE stock_lines, skus, settings, dataset_meta, `+strings.Join(entityTables, ", ")); err != nil {
 		return err
 	}
-	insert := func(table string, id string, v any) error {
-		b, err := json.Marshal(v)
+	copyDocs := func(table string, rows [][]any, err error) error {
 		if err != nil {
 			return err
 		}
-		_, err = tx.Exec(ctx, `INSERT INTO `+table+` (id, data) VALUES ($1, $2)`, id, b)
+		_, err = tx.CopyFrom(ctx, pgx.Identifier{table}, []string{"id", "data"}, pgx.CopyFromRows(rows))
 		return err
 	}
-	for _, v := range s.StockPoints.All() {
-		if err := insert("stock_points", v.ID, v); err != nil {
+	steps := []func() error{
+		func() error {
+			r, e := docRows(s.StockPoints.All(), func(v model.StockPoint) string { return v.ID })
+			return copyDocs("stock_points", r, e)
+		},
+		func() error {
+			r, e := docRows(s.Carriers.All(), func(v model.Carrier) string { return v.ID })
+			return copyDocs("carriers", r, e)
+		},
+		func() error {
+			r, e := docRows(s.Services.All(), func(v model.CarrierService) string { return v.ID })
+			return copyDocs("carrier_services", r, e)
+		},
+		func() error {
+			r, e := docRows(s.Hubs.All(), func(v model.Hub) string { return v.ID })
+			return copyDocs("hubs", r, e)
+		},
+		func() error {
+			r, e := docRows(s.Legs.All(), func(v model.Leg) string { return v.ID })
+			return copyDocs("legs", r, e)
+		},
+		func() error {
+			r, e := docRows(s.Routes.All(), func(v model.Route) string { return v.ID })
+			return copyDocs("routes", r, e)
+		},
+		func() error {
+			r, e := docRows(s.Modes.All(), func(v model.DeliveryMode) string { return v.ID })
+			return copyDocs("delivery_modes", r, e)
+		},
+		func() error {
+			r, e := docRows(s.Scenarios.All(), func(v model.Scenario) string { return v.ID })
+			return copyDocs("scenarios", r, e)
+		},
+		func() error {
+			r, e := docRows(s.RateCards.All(), func(v model.RateCard) string { return v.ID })
+			return copyDocs("rate_cards", r, e)
+		},
+		func() error {
+			r, e := docRows(s.AdditionalServices.All(), func(v model.AdditionalService) string { return v.ID })
+			return copyDocs("additional_services", r, e)
+		},
+		func() error {
+			r, e := docRows(s.StockViews.All(), func(v model.StockView) string { return v.ID })
+			return copyDocs("stock_views", r, e)
+		},
+	}
+	for _, step := range steps {
+		if err := step(); err != nil {
 			return err
 		}
 	}
-	for _, v := range s.Carriers.All() {
-		if err := insert("carriers", v.ID, v); err != nil {
-			return err
-		}
-	}
-	for _, v := range s.Services.All() {
-		if err := insert("carrier_services", v.ID, v); err != nil {
-			return err
-		}
-	}
-	for _, v := range s.Hubs.All() {
-		if err := insert("hubs", v.ID, v); err != nil {
-			return err
-		}
-	}
-	for _, v := range s.Legs.All() {
-		if err := insert("legs", v.ID, v); err != nil {
-			return err
-		}
-	}
-	for _, v := range s.Routes.All() {
-		if err := insert("routes", v.ID, v); err != nil {
-			return err
-		}
-	}
-	for _, v := range s.Modes.All() {
-		if err := insert("delivery_modes", v.ID, v); err != nil {
-			return err
-		}
-	}
-	for _, v := range s.Scenarios.All() {
-		if err := insert("scenarios", v.ID, v); err != nil {
-			return err
-		}
-	}
-	if err := insert("settings", "engine", s.Settings()); err != nil {
+	sb, _ := json.Marshal(s.Settings())
+	if _, err := tx.Exec(ctx, `INSERT INTO settings (id, data) VALUES ('engine', $1)`, sb); err != nil {
 		return err
 	}
 	cb, _ := json.Marshal(cfg)
-	if _, err := tx.Exec(ctx, `INSERT INTO dataset_meta (id, seed, config) VALUES (1, $1, $2)`, s.Seed, cb); err != nil {
+	if _, err := tx.Exec(ctx, `INSERT INTO dataset_meta (id, seed, config, stock_mode, initialized_at) VALUES (1, $1, $2, $3, now())`, s.Seed, cb, stockMode); err != nil {
 		return err
 	}
 	skus := s.Stock.SKUs()
 	rows := make([][]any, len(skus))
 	for i, k := range skus {
-		rows[i] = []any{i, k.Code, k.Name, k.Category, k.WeightKg, k.VolumeL}
+		var attrs []byte
+		if len(k.Attributes) > 0 {
+			attrs, _ = json.Marshal(k.Attributes)
+		}
+		rows[i] = []any{i, k.Code, k.Name, k.Category, k.WeightKg, k.VolumeL, k.LengthCm, k.WidthCm, k.HeightCm, k.PriceEur, attrs}
 	}
-	if _, err := tx.CopyFrom(ctx, pgx.Identifier{"skus"}, []string{"position", "code", "name", "category", "weight_kg", "volume_l"}, pgx.CopyFromRows(rows)); err != nil {
+	if _, err := tx.CopyFrom(ctx, pgx.Identifier{"skus"}, []string{"position", "code", "name", "category", "weight_kg", "volume_l", "length_cm", "width_cm", "height_cm", "price_eur", "attributes"}, pgx.CopyFromRows(rows)); err != nil {
 		return err
 	}
-	lines := make([][]any, 0, 1_200_000)
-	s.Stock.ForEachLine(func(l model.StockLine) {
-		lines = append(lines, []any{l.StockPointID, l.SKU, int32(l.Physical), int32(l.Reserved), l.Listed})
-	})
-	if _, err := tx.CopyFrom(ctx, pgx.Identifier{"stock_lines"}, []string{"stock_point_id", "sku", "physical", "reserved", "listed"}, pgx.CopyFromRows(lines)); err != nil {
-		return err
+	if stockMode == StockFull {
+		lines := make([][]any, 0, 1_200_000)
+		s.Stock.ForEachLine(func(l model.StockLine) {
+			lines = append(lines, []any{l.StockPointID, l.SKU, int32(l.Physical), int32(l.Reserved), l.Listed})
+		})
+		if _, err := tx.CopyFrom(ctx, pgx.Identifier{"stock_lines"}, []string{"stock_point_id", "sku", "physical", "reserved", "listed"}, pgx.CopyFromRows(lines)); err != nil {
+			return err
+		}
 	}
 	return tx.Commit(ctx)
 }
 
-// LoadAll builds a store from the database.
-func (d *DB) LoadAll(ctx context.Context) (*store.Store, []*bench.Run, error) {
+// SaveSKU upserts an article.
+func (d *DB) SaveSKU(k model.SKU) error {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	var attrs []byte
+	if len(k.Attributes) > 0 {
+		attrs, _ = json.Marshal(k.Attributes)
+	}
+	_, err := d.Pool.Exec(ctx, `UPDATE skus SET name=$2, category=$3, weight_kg=$4, volume_l=$5, length_cm=$6, width_cm=$7, height_cm=$8, price_eur=$9, attributes=$10 WHERE code=$1`,
+		k.Code, k.Name, k.Category, k.WeightKg, k.VolumeL, k.LengthCm, k.WidthCm, k.HeightCm, k.PriceEur, attrs)
+	return err
+}
+
+// LoadAll builds a store from the database. In delta mode, baseline
+// regenerates the stock from the seed before the stored changes are applied.
+func (d *DB) LoadAll(ctx context.Context, baseline func(s *store.Store, seed int64)) (*store.Store, []*bench.Run, error) {
 	s := store.New()
 	type loader struct {
 		table string
@@ -253,7 +352,8 @@ func (d *DB) LoadAll(ctx context.Context) (*store.Store, []*bench.Run, error) {
 	loaders := []loader{
 		{"delivery_modes", s.Modes.LoadJSON}, {"carriers", s.Carriers.LoadJSON}, {"carrier_services", s.Services.LoadJSON},
 		{"stock_points", s.StockPoints.LoadJSON}, {"hubs", s.Hubs.LoadJSON}, {"legs", s.Legs.LoadJSON},
-		{"routes", s.Routes.LoadJSON}, {"scenarios", s.Scenarios.LoadJSON},
+		{"routes", s.Routes.LoadJSON}, {"scenarios", s.Scenarios.LoadJSON}, {"rate_cards", s.RateCards.LoadJSON},
+		{"additional_services", s.AdditionalServices.LoadJSON}, {"stock_views", s.StockViews.LoadJSON},
 	}
 	for _, l := range loaders {
 		rows, err := d.Pool.Query(ctx, `SELECT data FROM `+l.table+` ORDER BY id`)
@@ -283,22 +383,30 @@ func (d *DB) LoadAll(ctx context.Context) (*store.Store, []*bench.Run, error) {
 			s.LoadSettingsRaw(es)
 		}
 	}
-	_ = d.Pool.QueryRow(ctx, `SELECT seed FROM dataset_meta WHERE id=1`).Scan(&s.Seed)
-	rows, err := d.Pool.Query(ctx, `SELECT code, name, category, weight_kg::float8, volume_l::float8 FROM skus ORDER BY position`)
+	stockMode := StockFull
+	_ = d.Pool.QueryRow(ctx, `SELECT seed, stock_mode FROM dataset_meta WHERE id=1`).Scan(&s.Seed, &stockMode)
+	rows, err := d.Pool.Query(ctx, `SELECT code, name, category, weight_kg::float8, volume_l::float8, length_cm::float8, width_cm::float8, height_cm::float8, price_eur::float8, attributes FROM skus ORDER BY position`)
 	if err != nil {
 		return nil, nil, err
 	}
 	var skus []model.SKU
 	for rows.Next() {
 		var k model.SKU
-		if err := rows.Scan(&k.Code, &k.Name, &k.Category, &k.WeightKg, &k.VolumeL); err != nil {
+		var attrs []byte
+		if err := rows.Scan(&k.Code, &k.Name, &k.Category, &k.WeightKg, &k.VolumeL, &k.LengthCm, &k.WidthCm, &k.HeightCm, &k.PriceEur, &attrs); err != nil {
 			rows.Close()
 			return nil, nil, err
+		}
+		if len(attrs) > 0 {
+			_ = json.Unmarshal(attrs, &k.Attributes)
 		}
 		skus = append(skus, k)
 	}
 	rows.Close()
 	s.InitStock(skus)
+	if stockMode == StockDelta && baseline != nil {
+		baseline(s, s.Seed)
+	}
 	st := s.Stock
 	st.Lock()
 	rows, err = d.Pool.Query(ctx, `SELECT stock_point_id, sku, physical, reserved, listed FROM stock_lines`)

@@ -58,6 +58,9 @@ func (c *reqCtx) findCandidates(mode string, dr *network.DestRoutes) []candidate
 	words := (sn.NPoints + 63) / 64
 	union := make([]uint64, words)
 	for i := range c.items {
+		if c.view != nil && !c.viewItemOK[i] {
+			continue // article outside the stock view of the mode
+		}
 		bm := sn.Avail[i]
 		for w := 0; w < words && w < len(bm); w++ {
 			union[w] |= bm[w]
@@ -84,7 +87,7 @@ func (c *reqCtx) findCandidates(mode string, dr *network.DestRoutes) []candidate
 				continue
 			}
 			node := c.colNodes[col]
-			if node == nil || node.StockPoint == nil || !node.AllowsMode(mode) {
+			if node == nil || node.StockPoint == nil || !node.AllowsMode(mode) || !c.view.AllowsNode(node) {
 				continue
 			}
 			if len(dr.ByIdx[node.Idx]) == 0 && !(consolidation && c.reachesHub(node, dr)) {
@@ -92,7 +95,7 @@ func (c *reqCtx) findCandidates(mode string, dr *network.DestRoutes) []candidate
 			}
 			cover := 0
 			for i, it := range c.items {
-				q := int(sn.Q(i, col))
+				q := c.qty(i, col)
 				if q > it.qty {
 					q = it.qty
 				}
@@ -197,7 +200,7 @@ func (c *reqCtx) searchAllocations(mode string, cands []candidate) []*allocation
 		maxAlloc = 12
 	}
 	// Per-item quantities by candidate.
-	q := func(ci, item int) int { return int(c.sn.Q(item, cands[ci].col)) }
+	q := func(ci, item int) int { return c.qty(item, cands[ci].col) }
 
 	results := map[uint64]*allocation{}
 	addResult := func(st *beamState) {

@@ -26,6 +26,7 @@ type Persister interface {
 	SaveEntity(kind, id string, v any) error
 	DeleteEntity(kind, id string) error
 	SaveStockLines(lines []model.StockLine) error
+	SaveSKU(v model.SKU) error
 }
 
 // Collection is a thread-safe ordered map of entities.
@@ -179,14 +180,17 @@ type Store struct {
 	persister     Persister
 	persistErr    atomic.Value
 
-	StockPoints *Collection[model.StockPoint]
-	Carriers    *Collection[model.Carrier]
-	Services    *Collection[model.CarrierService]
-	Hubs        *Collection[model.Hub]
-	Legs        *Collection[model.Leg]
-	Routes      *Collection[model.Route]
-	Modes       *Collection[model.DeliveryMode]
-	Scenarios   *Collection[model.Scenario]
+	StockPoints        *Collection[model.StockPoint]
+	Carriers           *Collection[model.Carrier]
+	Services           *Collection[model.CarrierService]
+	Hubs               *Collection[model.Hub]
+	Legs               *Collection[model.Leg]
+	Routes             *Collection[model.Route]
+	Modes              *Collection[model.DeliveryMode]
+	Scenarios          *Collection[model.Scenario]
+	RateCards          *Collection[model.RateCard]
+	AdditionalServices *Collection[model.AdditionalService]
+	StockViews         *Collection[model.StockView]
 
 	settingsMu sync.RWMutex
 	settings   model.EngineSettings
@@ -205,6 +209,9 @@ func New() *Store {
 	s.Routes = newCollection(s, "route", func(v *model.Route) string { return v.ID })
 	s.Modes = newCollection(s, "delivery_mode", func(v *model.DeliveryMode) string { return v.ID })
 	s.Scenarios = newCollection(s, "scenario", func(v *model.Scenario) string { return v.ID })
+	s.RateCards = newCollection(s, "rate_card", func(v *model.RateCard) string { return v.ID })
+	s.AdditionalServices = newCollection(s, "additional_service", func(v *model.AdditionalService) string { return v.ID })
+	s.StockViews = newCollection(s, "stock_view", func(v *model.StockView) string { return v.ID })
 	return s
 }
 
@@ -325,26 +332,29 @@ func (s *Store) LoadSettingsRaw(v model.EngineSettings) {
 
 // Counts summarises the repository for the dashboard.
 type Counts struct {
-	StockPoints       int            `json:"stockPoints"`
-	StockPointsByType map[string]int `json:"stockPointsByType"`
-	SKUs              int            `json:"skus"`
-	StockLines        int            `json:"stockLines"`
-	Carriers          int            `json:"carriers"`
-	Services          int            `json:"services"`
-	Hubs              int            `json:"hubs"`
-	Legs              int            `json:"legs"`
-	Routes            int            `json:"routes"`
-	DeliveryModes     int            `json:"deliveryModes"`
-	Scenarios         int            `json:"scenarios"`
-	ConfigVersion     uint64         `json:"configVersion"`
-	StockVersion      uint64         `json:"stockVersion"`
+	StockPoints        int            `json:"stockPoints"`
+	StockPointsByType  map[string]int `json:"stockPointsByType"`
+	SKUs               int            `json:"skus"`
+	StockLines         int            `json:"stockLines"`
+	Carriers           int            `json:"carriers"`
+	Services           int            `json:"services"`
+	Hubs               int            `json:"hubs"`
+	Legs               int            `json:"legs"`
+	Routes             int            `json:"routes"`
+	DeliveryModes      int            `json:"deliveryModes"`
+	Scenarios          int            `json:"scenarios"`
+	RateCards          int            `json:"rateCards"`
+	AdditionalServices int            `json:"additionalServices"`
+	StockViews         int            `json:"stockViews"`
+	ConfigVersion      uint64         `json:"configVersion"`
+	StockVersion       uint64         `json:"stockVersion"`
 }
 
 func (s *Store) Counts() Counts {
 	c := Counts{
 		StockPoints: s.StockPoints.Len(), Carriers: s.Carriers.Len(), Services: s.Services.Len(),
 		Hubs: s.Hubs.Len(), Legs: s.Legs.Len(), Routes: s.Routes.Len(), DeliveryModes: s.Modes.Len(),
-		Scenarios: s.Scenarios.Len(), ConfigVersion: s.ConfigVersion(), StockPointsByType: map[string]int{},
+		Scenarios: s.Scenarios.Len(), RateCards: s.RateCards.Len(), AdditionalServices: s.AdditionalServices.Len(), StockViews: s.StockViews.Len(), ConfigVersion: s.ConfigVersion(), StockPointsByType: map[string]int{},
 	}
 	for _, p := range s.StockPoints.All() {
 		c.StockPointsByType[string(p.Type)]++
@@ -382,4 +392,18 @@ func SortedIDs[T any](items []T, id func(T) string) []string {
 	}
 	sort.Strings(out)
 	return out
+}
+
+// UpdateSKU updates an article, invalidates caches and persists it.
+func (s *Store) UpdateSKU(v model.SKU) error {
+	if err := s.Stock.UpdateSKU(v); err != nil {
+		return err
+	}
+	s.configVersion.Add(1)
+	if s.persister != nil {
+		if err := s.persister.SaveSKU(v); err != nil {
+			s.persistErr.Store(err.Error())
+		}
+	}
+	return nil
 }

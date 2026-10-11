@@ -29,8 +29,26 @@ type PromiseRequest struct {
 	MaxOptions    int                 `json:"maxOptions,omitempty"`
 	Constraints   *PackageConstraints `json:"constraints,omitempty"`
 	Weights       *ScoringWeights     `json:"weights,omitempty"`
+	// StockViewID overrides the stock view of the delivery modes.
+	StockViewID string `json:"stockViewId,omitempty"`
+	// AdditionalServices requested by the customer (ids), e.g. INSTALLATION.
+	AdditionalServices []string `json:"additionalServices,omitempty"`
+	// OrderAmount overrides the order amount (default: Σ article price ×
+	// quantity), used by franco and percentage rules.
+	OrderAmount *float64 `json:"orderAmount,omitempty"`
+	// Alternatives asks, for every package, the other stock points able to
+	// ship it, sorted (deliveryHours, cost, price, carbonKg, distanceKm).
+	Alternatives *AlternativesRequest `json:"alternatives,omitempty"`
+	// Criteria override the delivery mode criteria for this request.
+	Criteria  []Criterion `json:"criteria,omitempty"`
+	Selection string      `json:"selection,omitempty"`
 	// Debug adds the rejected candidates and engine counters.
 	Debug bool `json:"debug,omitempty"`
+}
+
+type AlternativesRequest struct {
+	Limit  int    `json:"limit,omitempty"`  // default 5, max 20
+	SortBy string `json:"sortBy,omitempty"` // default deliveryHours
 }
 
 type TimeWindow struct {
@@ -39,16 +57,18 @@ type TimeWindow struct {
 }
 
 type LegResult struct {
-	LegID              string      `json:"legId"`
-	From               string      `json:"from"`
-	To                 string      `json:"to"`
-	Carrier            string      `json:"carrier"`
-	CarrierName        string      `json:"carrierName"`
-	Service            string      `json:"service"`
-	ServiceKind        ServiceKind `json:"serviceKind"`
-	EstimatedDeparture time.Time   `json:"estimatedDeparture"`
-	EstimatedArrival   time.Time   `json:"estimatedArrival"`
-	Cost               float64     `json:"cost"`
+	LegID              string             `json:"legId"`
+	From               string             `json:"from"`
+	To                 string             `json:"to"`
+	Carrier            string             `json:"carrier"`
+	CarrierName        string             `json:"carrierName"`
+	Service            string             `json:"service"`
+	ServiceKind        ServiceKind        `json:"serviceKind"`
+	EstimatedDeparture time.Time          `json:"estimatedDeparture"`
+	EstimatedArrival   time.Time          `json:"estimatedArrival"`
+	DistanceKm         float64            `json:"distanceKm"`
+	Metrics            map[string]float64 `json:"metrics,omitempty"`
+	Cost               float64            `json:"cost"`
 }
 
 type PackageResult struct {
@@ -61,6 +81,38 @@ type PackageResult struct {
 	Hubs              []string     `json:"hubs"`
 	ConsolidationID   string       `json:"consolidationId,omitempty"`
 	EstimatedDelivery TimeWindow   `json:"estimatedDelivery"`
+	// LeadTimeHours from the order to the end of the delivery window.
+	LeadTimeHours float64 `json:"leadTimeHours"`
+	DistanceKm    float64 `json:"distanceKm"`
+	// Metrics of this parcel (cost, price share, carbonKg, custom outputs).
+	Metrics map[string]float64 `json:"metrics"`
+	// Alternatives: other stock points able to ship this package.
+	Alternatives []PackageAlternative `json:"alternatives,omitempty"`
+}
+
+type PackageAlternative struct {
+	StockPointID      string             `json:"stockPointId"`
+	Name              string             `json:"name"`
+	Type              string             `json:"type"`
+	City              string             `json:"city"`
+	DistanceKm        float64            `json:"distanceKm"`
+	EstimatedDelivery TimeWindow         `json:"estimatedDelivery"`
+	DeliveryHours     float64            `json:"deliveryHours"`
+	Parcels           int                `json:"parcels"`
+	Carriers          []string           `json:"carriers"`
+	Route             []string           `json:"route"`
+	Metrics           map[string]float64 `json:"metrics"`
+	Current           bool               `json:"current"`
+}
+
+type AdditionalServiceResult struct {
+	ID        string             `json:"id"`
+	Name      string             `json:"name"`
+	Kind      string             `json:"kind"`
+	Requested bool               `json:"requested"`
+	Items     []BasketItem       `json:"items"`
+	ExtraDays int                `json:"extraDays"`
+	Metrics   map[string]float64 `json:"metrics"`
 }
 
 // Allocation is the quantity of one SKU taken from one stock point.
@@ -111,6 +163,8 @@ type TimelineEvent struct {
 }
 
 type ScoreBreakdown struct {
+	Price         float64 `json:"price"`
+	CarbonKg      float64 `json:"carbonKg"`
 	DeliveryHours float64 `json:"deliveryHours"`
 	Packages      int     `json:"packages"`
 	Cost          float64 `json:"cost"`
@@ -134,7 +188,13 @@ type PromiseOption struct {
 	Consolidations              []ConsolidationResult `json:"consolidations"`
 	Timeline                    []TimelineEvent       `json:"timeline"`
 	Criteria                    ScoreBreakdown        `json:"criteria"`
-	Score                       float64               `json:"score"`
+	// Metrics totals: cost, price (billed to the customer), carbonKg and
+	// custom rate card outputs.
+	Metrics map[string]float64 `json:"metrics"`
+	// AdditionalServices requested (applied) or offered by the final carrier.
+	AdditionalServices []AdditionalServiceResult `json:"additionalServices"`
+	StockViewID        string                    `json:"stockViewId,omitempty"`
+	Score              float64                   `json:"score"`
 }
 
 type EngineStats struct {

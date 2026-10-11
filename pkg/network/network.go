@@ -15,6 +15,7 @@ import (
 
 	"github.com/onestock/dp100ms/pkg/calendar"
 	"github.com/onestock/dp100ms/pkg/model"
+	"github.com/onestock/dp100ms/pkg/pricing"
 	"github.com/onestock/dp100ms/pkg/store"
 )
 
@@ -76,6 +77,13 @@ type Leg struct {
 	MaxWeightKg float64
 	MaxVolumeL  float64
 	MaxItems    int
+	// pricing
+	FromNode     *Node
+	Cards        []*pricing.Card
+	Restrictions []model.Restriction
+	CarbonFactor float64 // g CO2e per kg·km
+	DistanceKm   float64 // hub-bound legs (final legs: FinalDistanceKm)
+	Offers       []*model.AdditionalService
 }
 
 // ServesDept reports whether a final leg covers a department.
@@ -153,6 +161,11 @@ type Network struct {
 	Carriers          map[string]*model.Carrier
 	ExplicitRoutes    []model.Route
 	ConsolidationHubs []*Node
+	Registry          *pricing.Registry
+	RateCards         map[string]*pricing.Card
+	ModePriceCards    map[string][]*pricing.Card
+	AddServices       map[string]*model.AdditionalService
+	StockViews        map[string]*StockView
 
 	// HubInbound[hub][origin] lists paths origin -> hub (<= 2 legs).
 	HubInbound map[string]map[string][]*Path
@@ -345,6 +358,7 @@ func Compile(s *store.Store) *Network {
 			n.In[lg.To] = append(n.In[lg.To], cl)
 		}
 	}
+	n.attachPricing(s)
 	for _, r := range s.Routes.All() {
 		if r.Active {
 			n.ExplicitRoutes = append(n.ExplicitRoutes, r)

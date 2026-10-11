@@ -22,6 +22,7 @@ import (
 	"github.com/onestock/dp100ms/pkg/engine"
 	"github.com/onestock/dp100ms/pkg/model"
 	"github.com/onestock/dp100ms/pkg/network"
+	"github.com/onestock/dp100ms/pkg/pg"
 	"github.com/onestock/dp100ms/pkg/store"
 )
 
@@ -32,7 +33,9 @@ type Options struct {
 	StaticDir string
 	Platform  string
 	// Reseed rebuilds the store with a new seed (admin action).
-	Reseed func(seed int64) (*store.Store, error)
+	Reseed func(seed int64, stockMode string) (*store.Store, error)
+	// DB is the PostgreSQL persistence, when configured.
+	DB *pg.DB
 	// InitialRuns restores the benchmark history.
 	InitialRuns []*bench.Run
 }
@@ -214,6 +217,20 @@ func (s *Server) routes() {
 			return func(v *model.Scenario) bool { return q == "" || contains(v.Name, q) || contains(v.ID, q) }
 		})
 	m.HandleFunc("POST /api/v1/scenarios/{id}/run", s.runScenario)
+	registerCRUD(s, "rate-cards", "rate card", func(st *store.Store) *store.Collection[model.RateCard] { return st.RateCards }, validateRateCard,
+		func(r *http.Request) func(*model.RateCard) bool {
+			q, scope, carrier := r.URL.Query().Get("q"), r.URL.Query().Get("scope"), r.URL.Query().Get("carrierId")
+			return func(v *model.RateCard) bool {
+				return (scope == "" || string(v.Scope) == scope) && (carrier == "" || v.CarrierID == carrier) && (q == "" || contains(v.ID, q) || contains(v.Name, q))
+			}
+		})
+	registerCRUD(s, "additional-services", "additional service", func(st *store.Store) *store.Collection[model.AdditionalService] { return st.AdditionalServices }, validateAdditionalService, nil)
+	registerCRUD(s, "stock-views", "stock view", func(st *store.Store) *store.Collection[model.StockView] { return st.StockViews }, validateStockView, nil)
+	m.HandleFunc("POST /api/v1/rate-cards/quote", s.quoteRateCard)
+	m.HandleFunc("POST /api/v1/rate-cards/{id}/quote", s.quoteRateCard)
+	m.HandleFunc("GET /api/v1/pricing/fields", s.pricingFields)
+	m.HandleFunc("GET /api/v1/stock-views/{id}/preview", s.previewStockView)
+	m.HandleFunc("PUT /api/v1/skus/{sku}", s.admin(s.putSKU))
 
 	m.HandleFunc("GET /api/v1/stock-points/{id}/stock", s.pointStock)
 	m.HandleFunc("GET /api/v1/stock-points/{id}/summary", s.pointSummary)
@@ -234,6 +251,7 @@ func (s *Server) routes() {
 	m.HandleFunc("GET /api/v1/settings", s.getSettings)
 	m.HandleFunc("PUT /api/v1/settings", s.admin(s.putSettings))
 	m.HandleFunc("POST /api/v1/admin/reseed", s.admin(s.reseed))
+	m.HandleFunc("GET /api/v1/admin/database", s.admin(s.databaseStatus))
 
 	m.HandleFunc("GET /api/v1/benchmarks", s.listBenchmarks)
 	m.HandleFunc("GET /api/v1/benchmarks/presets", func(w http.ResponseWriter, r *http.Request) { writeJSON(w, 200, bench.Presets) })
@@ -903,7 +921,8 @@ func (s *Server) putSettings(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) reseed(w http.ResponseWriter, r *http.Request) {
 	var body struct {
-		Seed int64 `json:"seed"`
+		Seed         int64  `json:"seed"`
+		StockStorage string `json:"stockStorage,omitempty"` // delta | full
 	}
 	if !decode(w, r, &body) {
 		return
@@ -912,7 +931,7 @@ func (s *Server) reseed(w http.ResponseWriter, r *http.Request) {
 	var st *store.Store
 	var err error
 	if s.opts.Reseed != nil {
-		st, err = s.opts.Reseed(body.Seed)
+		st, err = s.opts.Reseed(body.Seed, body.StockStorage)
 	} else {
 		cfg := datagen.DefaultConfig()
 		cfg.Seed = body.Seed
@@ -1045,4 +1064,17 @@ func (s *Server) benchBaskets(w http.ResponseWriter, r *http.Request) {
 		p.Modes = strings.Split(v, ",")
 	}
 	writeJSON(w, 200, bench.GenerateBaskets(s.store(), p))
+}
+
+func (s *Server) databaseStatus(w http.ResponseWriter, r *http.Request) {
+	if s.opts.DB == nil {
+		writeJSON(w, 200, map[string]any{"persistence": false, "detail": "no DATABASE_URL / POSTGRES_URL configured: data is generated in memory"})
+		return
+	}
+	m, err := s.opts.DB.Meta(r.Context())
+	if err != nil {
+		writeProblem(w, r, 500, "internal", err.Error(), nil)
+		return
+	}
+	writeJSON(w, 200, map[string]any{"persistence": true, "dataset": m, "lastPersistError": s.store().LastPersistError()})
 }

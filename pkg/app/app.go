@@ -5,6 +5,7 @@ package app
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"os"
 	"runtime/debug"
@@ -18,13 +19,19 @@ import (
 )
 
 // Environment variables:
-//   SEED            dataset seed when generating in memory (default 42)
-//   ADMIN_TOKEN     bearer token of the admin API (default dev-admin-token)
-//   DATABASE_URL    PostgreSQL URL; enables persistence
-//   STOCK_SOURCE    "database" (default when DATABASE_URL is set) or "generate"
-//   STATIC_DIR      directory of the built frontend to serve
-//   PLATFORM        free label (local, docker, vercel, cloudrun)
-//   GOGC            Go GC target (default 200 here)
+//
+//	SEED            dataset seed (default 42)
+//	ADMIN_TOKEN     bearer token of the admin API (default dev-admin-token)
+//	DATABASE_URL    PostgreSQL URL; POSTGRES_URL (Vercel / Neon integration)
+//	                is used when DATABASE_URL is not set
+//	DATABASE_URL_UNPOOLED / POSTGRES_URL_NON_POOLING
+//	                direct connection used for migrations and initialisation
+//	STOCK_STORAGE   "delta" (default: only changed stock lines are stored,
+//	                the baseline is regenerated from the seed) or "full"
+//	STOCK_SOURCE    "generate" ignores the database content at boot
+//	STATIC_DIR      directory of the built frontend to serve
+//	PLATFORM        free label (local, docker, vercel, cloudrun)
+//	GOGC            Go GC target (default 200 here)
 
 func Seed() int64 {
 	if v, err := strconv.ParseInt(os.Getenv("SEED"), 10, 64); err == nil {
@@ -33,10 +40,80 @@ func Seed() int64 {
 	return 42
 }
 
+func firstEnv(names ...string) string {
+	for _, n := range names {
+		if v := os.Getenv(n); v != "" {
+			return v
+		}
+	}
+	return ""
+}
+
+// DatabaseURLs returns the pooled URL used at runtime and the direct URL
+// used for migrations and the initial load.
+func DatabaseURLs() (runtime, direct string) {
+	runtime = firstEnv("DATABASE_URL", "POSTGRES_URL", "POSTGRES_PRISMA_URL")
+	direct = firstEnv("DATABASE_URL_UNPOOLED", "POSTGRES_URL_NON_POOLING")
+	if direct == "" {
+		direct = runtime
+	}
+	return
+}
+
+// StockStorage returns the configured stock storage mode.
+func StockStorage() string {
+	if os.Getenv("STOCK_STORAGE") == pg.StockFull {
+		return pg.StockFull
+	}
+	return pg.StockDelta
+}
+
 func generate(seed int64) *store.Store {
 	cfg := datagen.DefaultConfig()
 	cfg.Seed = seed
 	return datagen.Generate(cfg)
+}
+
+func baseline(s *store.Store, seed int64) {
+	cfg := datagen.DefaultConfig()
+	cfg.Seed = seed
+	datagen.FillStock(s, cfg)
+}
+
+// InitDatabase migrates the database and, when it is empty, loads the
+// reference dataset. It is safe to call from several instances at once:
+// an advisory lock serialises the initialisation. It returns true when this
+// call performed the initial load.
+func InitDatabase(ctx context.Context, directURL string, seed int64, stockMode string, force bool) (bool, error) {
+	db, err := pg.Open(ctx, directURL)
+	if err != nil {
+		return false, err
+	}
+	defer db.Close()
+	loaded := false
+	err = db.WithInitLock(ctx, func() error {
+		if err := db.Migrate(ctx); err != nil {
+			return err
+		}
+		empty, err := db.IsEmpty(ctx)
+		if err != nil {
+			return err
+		}
+		if !empty && !force {
+			return nil
+		}
+		t0 := time.Now()
+		cfg := datagen.DefaultConfig()
+		cfg.Seed = seed
+		st := datagen.Generate(cfg)
+		if err := db.SaveAll(ctx, st, cfg, stockMode); err != nil {
+			return fmt.Errorf("initial load: %w", err)
+		}
+		loaded = true
+		log.Printf("database initialised in %v (seed %d, stock storage %s)", time.Since(t0).Round(time.Millisecond), seed, stockMode)
+		return nil
+	})
+	return loaded, err
 }
 
 // Bootstrap builds the API server.
@@ -65,43 +142,36 @@ func Bootstrap(ctx context.Context) (*api.Server, error) {
 	}
 	opts := api.Options{AdminToken: token, StaticDir: os.Getenv("STATIC_DIR"), Platform: platform}
 	var st *store.Store
-	var db *pg.DB
-	if url := os.Getenv("DATABASE_URL"); url != "" {
-		var err error
-		db, err = pg.Open(ctx, url)
+	runtimeURL, directURL := DatabaseURLs()
+	if runtimeURL != "" {
+		if _, err := InitDatabase(ctx, directURL, Seed(), StockStorage(), false); err != nil {
+			return nil, err
+		}
+		db, err := pg.Open(ctx, runtimeURL)
 		if err != nil {
 			return nil, err
 		}
-		if err := db.Migrate(ctx); err != nil {
-			return nil, err
-		}
-		empty, err := db.IsEmpty(ctx)
-		if err != nil {
-			return nil, err
-		}
-		if empty || os.Getenv("STOCK_SOURCE") == "generate" {
+		if os.Getenv("STOCK_SOURCE") == "generate" {
 			st = generate(Seed())
-			if empty {
-				log.Printf("database empty: seeding with seed %d", st.Seed)
-				if err := db.SaveAll(ctx, st, datagen.DefaultConfig()); err != nil {
-					return nil, err
-				}
-			}
 		} else {
 			var runs []*api.BenchRun
-			st, runs, err = db.LoadAll(ctx)
+			st, runs, err = db.LoadAll(ctx, baseline)
 			if err != nil {
 				return nil, err
 			}
-			defer func() { _ = runs }()
 			opts.InitialRuns = runs
 		}
 		st.SetPersister(db)
-		opts.Reseed = func(seed int64) (*store.Store, error) {
-			s := generate(seed)
-			cfg := datagen.DefaultConfig()
-			cfg.Seed = seed
-			if err := db.SaveAll(context.Background(), s, cfg); err != nil {
+		opts.DB = db
+		opts.Reseed = func(seed int64, stockMode string) (*store.Store, error) {
+			if stockMode == "" {
+				stockMode = StockStorage()
+			}
+			if _, err := InitDatabase(context.Background(), directURL, seed, stockMode, true); err != nil {
+				return nil, err
+			}
+			s, _, err := db.LoadAll(context.Background(), baseline)
+			if err != nil {
 				return nil, err
 			}
 			s.SetPersister(db)
@@ -112,6 +182,6 @@ func Bootstrap(ctx context.Context) (*api.Server, error) {
 	}
 	srv := api.New(st, opts)
 	log.Printf("ready in %v: %d stock points, %d stock lines (platform=%s, persistence=%v)",
-		time.Since(t0).Round(time.Millisecond), st.StockPoints.Len(), st.Stock.LineCount(), platform, db != nil)
+		time.Since(t0).Round(time.Millisecond), st.StockPoints.Len(), st.Stock.LineCount(), platform, runtimeURL != "")
 	return srv, nil
 }

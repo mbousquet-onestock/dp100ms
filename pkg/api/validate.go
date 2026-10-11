@@ -119,6 +119,7 @@ func validateService(s *store.Store, v *model.CarrierService) []fe {
 	errs = append(errs, checkCalendar("pickupCalendar", v.PickupCalendar)...)
 	errs = append(errs, checkCalendar("deliveryCalendar", v.DeliveryCalendar)...)
 	errs = append(errs, checkModes(s, "modes", v.Modes)...)
+	errs = append(errs, validateServicePricing(s, v)...)
 	return errs
 }
 
@@ -188,10 +189,11 @@ func validateLeg(s *store.Store, v *model.Leg) []fe {
 		errs = append(errs, checkCalendar("calendar", *v.Calendar)...)
 	}
 	errs = append(errs, checkModes(s, "modes", v.Modes)...)
+	errs = append(errs, validateLegPricing(s, v)...)
 	return errs
 }
 
-func validateMode(_ *store.Store, v *model.DeliveryMode) []fe {
+func validateMode(st *store.Store, v *model.DeliveryMode) []fe {
 	errs := checkID(v.ID)
 	if v.Name == "" {
 		errs = append(errs, fe{Field: "name", Message: "required"})
@@ -205,7 +207,7 @@ func validateMode(_ *store.Store, v *model.DeliveryMode) []fe {
 	if v.MaxDeliveryDays < 0 {
 		errs = append(errs, fe{Field: "maxDeliveryDays", Message: "must be >= 0"})
 	}
-	return errs
+	return append(errs, validateModePricing(st, v)...)
 }
 
 func validateScenario(_ *store.Store, v *model.Scenario) []fe {

@@ -8,6 +8,7 @@ package datagen
 
 import (
 	"fmt"
+	"hash/fnv"
 	"math"
 	"math/rand"
 	"sort"
@@ -86,6 +87,7 @@ func Catalog(cfg Config) []model.SKU {
 			VolumeL:  math.Round(w*cat.volPerKg*(0.7+0.6*r.Float64())*10) / 10,
 		}
 	}
+	enrichCatalog(skus, cfg)
 	return skus
 }
 
@@ -439,7 +441,8 @@ func Generate(cfg Config) *store.Store {
 	// ---------------- catalog & stock
 	skus := Catalog(cfg)
 	s.InitStock(skus)
-	generateStock(s, cfg)
+	generateStock(s, cfg, nil)
+	generatePricing(s)
 	s.LoadSettingsRaw(model.DefaultSettings())
 	generateScenarios(s)
 	s.BumpConfig()
@@ -474,9 +477,31 @@ func expandCities(n int) []City {
 // generateStock fills the matrix. Quantities are drawn in parallel (one RNG
 // per stock point derived from the seed, so the result does not depend on
 // scheduling) and written serially: bitmap words are shared by 64 points.
-func generateStock(s *store.Store, cfg Config) {
+// FillStock regenerates the baseline stock of the generated stock points
+// (used to rebuild the matrix when the database stores only the changes).
+// Stock points created later by users start empty.
+func FillStock(s *store.Store, cfg Config) {
+	generated := map[string]bool{}
+	for i := 1; i <= cfg.Stores; i++ {
+		generated[fmt.Sprintf("STORE-%03d", i)] = true
+	}
+	for i := 1; i <= cfg.Warehouses; i++ {
+		generated[fmt.Sprintf("WH-%02d", i)] = true
+	}
+	for i := 1; i <= cfg.LastMileHubs; i++ {
+		generated[fmt.Sprintf("LMH-%02d", i)] = true
+	}
+	generateStock(s, cfg, generated)
+}
+
+func generateStock(s *store.Store, cfg Config, only map[string]bool) {
 	st := s.Stock
-	pts := s.StockPoints.All()
+	var pts []model.StockPoint
+	for _, sp := range s.StockPoints.All() {
+		if only == nil || only[sp.ID] {
+			pts = append(pts, sp)
+		}
+	}
 	n := len(st.SKUs())
 	per := cfg.SKUsPerPoint
 	if per > n {
@@ -502,7 +527,11 @@ func generateStock(s *store.Store, cfg Config) {
 		go func(i int, sp model.StockPoint, col int) {
 			defer wg.Done()
 			defer func() { <-sem }()
-			r := rand.New(rand.NewSource(cfg.Seed*1_000_003 + int64(col)*7_919 + 17))
+			// the RNG depends on the point id (not its column) so that the
+			// baseline can be regenerated whatever the loading order
+			h := fnv.New64a()
+			_, _ = h.Write([]byte(sp.ID))
+			r := rand.New(rand.NewSource(cfg.Seed*1_000_003 + int64(h.Sum64()>>1)))
 			universe := n
 			if sp.Type == model.StockPointWarehouse && cfg.WarehouseCatalog >= per && cfg.WarehouseCatalog < n {
 				universe = cfg.WarehouseCatalog

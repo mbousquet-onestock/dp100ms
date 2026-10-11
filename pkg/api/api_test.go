@@ -227,3 +227,78 @@ func TestNotFoundRoute(t *testing.T) {
 		t.Fatalf("preflight %d", rec.Code)
 	}
 }
+
+func TestRateCardEndpoints(t *testing.T) {
+	s := server(t)
+	card := `{"id":"RC-TEST","name":"Test","scope":"PARCEL","volumetricDivisor":5000,"active":true,
+	  "derived":[{"key":"lw","terms":[{"var":"lengthCm","coef":1},{"var":"widthCm","coef":2}]}],
+	  "rows":[{"conditions":{"chargeableWeightKg":{"max":2}},"outputs":{"cost":{"fixed":5},"co2Index":{"fixed":1}}},
+	          {"outputs":{"cost":{"fixed":8,"perKg":0.5}}}],
+	  "surcharges":[{"label":"long","conditions":{"lw":{"min":100}},"outputs":{"cost":{"fixed":3}}}]}`
+	if rec := call(t, s, "POST", "/api/v1/rate-cards", card, true); rec.Code != 201 {
+		t.Fatalf("create: %d %s", rec.Code, rec.Body)
+	}
+	rec := call(t, s, "POST", "/api/v1/rate-cards/RC-TEST/quote", `{"vars":{"weightKg":1.5,"lengthCm":20,"widthCm":10,"heightCm":5}}`, false)
+	if rec.Code != 200 || !strings.Contains(rec.Body.String(), `"cost":5`) || !strings.Contains(rec.Body.String(), `"co2Index":1`) {
+		t.Fatalf("quote: %d %s", rec.Code, rec.Body)
+	}
+	rec = call(t, s, "POST", "/api/v1/rate-cards/quote", `{"card":`+card+`,"items":[{"sku":"SKU-00001","quantity":3}]}`, false)
+	if rec.Code != 200 || !strings.Contains(rec.Body.String(), `"matched":true`) {
+		t.Fatalf("inline quote: %d %s", rec.Code, rec.Body)
+	}
+	bad := `{"id":"RC-BAD","name":"Bad","scope":"MONTHLY","active":true,"rows":[{"conditions":{"color":{"min":1}},"outputs":{"cost":{"fixed":1}}}]}`
+	if rec := call(t, s, "POST", "/api/v1/rate-cards", bad, true); rec.Code != 422 || !strings.Contains(rec.Body.String(), "unknown variable color") {
+		t.Fatalf("validation: %d %s", rec.Code, rec.Body)
+	}
+}
+
+func TestPricingConfigurationEndpoints(t *testing.T) {
+	s := server(t)
+	rec := call(t, s, "GET", "/api/v1/pricing/fields", "", false)
+	if !strings.Contains(rec.Body.String(), "attributes.hazmat") || !strings.Contains(rec.Body.String(), "chargeableWeightKg") {
+		t.Fatalf("fields: %s", rec.Body.String()[:200])
+	}
+	rec = call(t, s, "GET", "/api/v1/stock-views/WAREHOUSES/preview", "", false)
+	if !strings.Contains(rec.Body.String(), `"stockPoints":10`) {
+		t.Fatalf("preview: %s", rec.Body.String()[:200])
+	}
+	// a service restriction with an unknown field is refused
+	svc := call(t, s, "GET", "/api/v1/services/RELAIS-STD", "", false).Body.String()
+	svc = strings.Replace(svc, `"field":"longestSideCm"`, `"field":"colour"`, 1)
+	if rec := call(t, s, "PUT", "/api/v1/services/RELAIS-STD", svc, true); rec.Code != 422 {
+		t.Fatalf("restriction validation: %d", rec.Code)
+	}
+	// article update (attributes usable by rules)
+	sku := `{"sku":"SKU-00001","name":"Article test","category":"Maison","weightKg":2,"volumeL":5,"lengthCm":40,"widthCm":30,"heightCm":20,"priceEur":79,"attributes":{"fragile":true}}`
+	if rec := call(t, s, "PUT", "/api/v1/skus/SKU-00001", sku, true); rec.Code != 200 {
+		t.Fatalf("sku update: %d %s", rec.Code, rec.Body)
+	}
+	if rec := call(t, s, "GET", "/api/v1/skus/SKU-00001", "", false); !strings.Contains(rec.Body.String(), `"fragile":true`) {
+		t.Fatalf("sku not updated: %s", rec.Body)
+	}
+	// promise with services, alternatives and a stock view
+	body := `{"destination":{"postalCode":"75011"},"orderDate":"2026-10-12T10:00:00+02:00","items":[{"sku":"SKU-00002","quantity":1}],
+	  "deliveryModes":["STANDARD","ECO"],"stockViewId":"WAREHOUSES","alternatives":{"limit":3,"sortBy":"carbonKg"}}`
+	rec = call(t, s, "POST", "/api/v1/delivery-promises", body, false)
+	if rec.Code != 200 {
+		t.Fatalf("promise: %d %s", rec.Code, rec.Body)
+	}
+	var resp model.PromiseResponse
+	_ = json.Unmarshal(rec.Body.Bytes(), &resp)
+	if len(resp.Options) == 0 {
+		t.Fatalf("no option: %+v", resp.Unavailable)
+	}
+	for _, o := range resp.Options {
+		if _, ok := o.Metrics["price"]; !ok || o.StockViewID != "WAREHOUSES" || len(o.Packages[0].Alternatives) == 0 {
+			t.Fatalf("incomplete option: %+v", o)
+		}
+		for _, a := range o.Allocations {
+			if !strings.HasPrefix(a.StockPointID, "WH-") {
+				t.Fatalf("stock view ignored: %s", a.StockPointID)
+			}
+		}
+	}
+	if rec := call(t, s, "POST", "/api/v1/delivery-promises", strings.Replace(body, `"WAREHOUSES"`, `"NOPE"`, 1), false); rec.Code != 422 {
+		t.Fatalf("unknown stock view accepted: %d", rec.Code)
+	}
+}
