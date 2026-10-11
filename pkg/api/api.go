@@ -593,8 +593,13 @@ func (s *Server) pointConnections(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
+	// legs of the compiled network (generated from the carrier routes)
 	var out, in []model.Leg
-	for _, l := range st.Legs.All() {
+	for _, cl := range s.engine().Network().Legs {
+		l := *cl.Leg
+		if len(l.Departures) == 0 && cl.DefaultPlan != nil {
+			l.Departures = cl.DefaultPlan.Departures
+		}
 		if l.From == id {
 			out = append(out, l)
 		}

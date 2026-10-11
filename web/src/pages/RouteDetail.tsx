@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { ApiError, errorMessage } from '../api/client';
 import { useCarrierRoute, useCarrierRoutesCrud, useCarriers, useServices, useZones } from '../api/hooks';
 import type { CarrierRoute, RateCard } from '../api/types';
@@ -160,6 +160,11 @@ function RouteEditor({ initial, isNew }: { initial: CarrierRoute; isNew: boolean
           {v.originZoneId && <ShippingPointsLine zoneId={v.originZoneId} />}
         </div>
         <div className="flex flex-wrap items-center gap-m">
+          {!isNew && (
+            <Link to={`/network?carrierRoute=${encodeURIComponent(initial.id)}`} className="btn btn-secondary" data-testid="route-network-link">
+              <IconRoute /> Voir dans le réseau
+            </Link>
+          )}
           {!isNew && <ConfirmButton small={false} label="Supprimer" confirmLabel="Supprimer la route" pending={crud.remove.isPending} onConfirm={remove} />}
           {!isNew && (
             <button

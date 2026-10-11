@@ -2,8 +2,8 @@ import { useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { api, errorMessage } from '../api/client';
-import { useConnections, usePointStock, usePointSummary, useStockPoint } from '../api/hooks';
-import type { Leg, StockLine, StockPoint } from '../api/types';
+import { useGraph, usePointStock, usePointSummary, useStockPoint } from '../api/hooks';
+import type { GraphLeg, StockLine, StockPoint } from '../api/types';
 import { IconBox, IconChevronLeft, IconEdit, IconRoute } from '../components/Icons';
 import { StockPointForm } from '../components/StockPointForm';
 import { Badge, Card, ConfirmButton, EmptyState, ErrorAlert, Kpi, Loading, PageHeader, Pagination, SearchInput, Spinner, Switch, useDebounced, useToast } from '../components/ui';
@@ -193,26 +193,42 @@ function StockRow({ line }: { line: StockLine }) {
 }
 
 function ConnectionsCard({ id }: { id: string }) {
-  const c = useConnections(id);
+  // Legs are generated from the carrier routes: read them from the compiled network graph.
+  const g = useGraph();
+  const live = (g.data?.legs ?? []).filter((l) => l.inUse !== false);
+  const outgoing = live.filter((l) => l.from === id);
+  const incoming = live.filter((l) => l.to === id);
   return (
-    <Card title="Connexions logistiques" icon={<IconRoute size={20} />} bodyClassName="" actions={<Link to="/network" className="btn btn-secondary btn-sm">Éditeur de routes</Link>}>
-      {c.isLoading ? (
+    <Card
+      title="Connexions logistiques"
+      icon={<IconRoute size={20} />}
+      bodyClassName=""
+      actions={
+        <Link to={`/network?node=${encodeURIComponent(id)}`} className="btn btn-secondary btn-sm">
+          Voir dans le réseau
+        </Link>
+      }
+    >
+      {g.isLoading ? (
         <Loading />
-      ) : c.error ? (
+      ) : g.error ? (
         <div className="p-xl">
-          <ErrorAlert error={c.error} />
+          <ErrorAlert error={g.error} />
         </div>
       ) : (
         <div>
-          <LegTable title={`Legs sortants (${c.data?.outgoing.length ?? 0})`} legs={c.data?.outgoing ?? []} dir="out" />
-          <LegTable title={`Legs entrants (${c.data?.incoming.length ?? 0})`} legs={c.data?.incoming ?? []} dir="in" />
+          <div className="px-xl pt-l text-xs text-neutral-500">
+            Legs générés depuis les routes des transporteurs : pour les modifier, ouvrir la route dans <Link to="/carriers" className="text-primary-1000 hover:underline">Transporteurs</Link>.
+          </div>
+          <LegTable title={`Legs sortants (${outgoing.length})`} legs={outgoing} dir="out" />
+          <LegTable title={`Legs entrants (${incoming.length})`} legs={incoming} dir="in" />
         </div>
       )}
     </Card>
   );
 }
 
-function LegTable({ title, legs, dir }: { title: string; legs: Leg[]; dir: 'in' | 'out' }) {
+function LegTable({ title, legs, dir }: { title: string; legs: GraphLeg[]; dir: 'in' | 'out' }) {
   return (
     <div className="border-b border-border last:border-b-0">
       <div className="px-xl pb-s pt-l text-xs font-medium text-grey-800">{title}</div>
@@ -227,6 +243,7 @@ function LegTable({ title, legs, dir }: { title: string; legs: Leg[]; dir: 'in' 
                 <th>{dir === 'out' ? 'Vers' : 'Depuis'}</th>
                 <th>Transporteur / service</th>
                 <th>Départs</th>
+                <th>Routes transporteur</th>
                 <th className="num">Surcoût</th>
               </tr>
             </thead>
@@ -239,6 +256,18 @@ function LegTable({ title, legs, dir }: { title: string; legs: Leg[]; dir: 'in' 
                     {l.carrierId} · {l.serviceId}
                   </td>
                   <td className="text-xs">{(l.departures ?? []).join(', ')}</td>
+                  <td className="text-xs">
+                    {(l.carrierRouteIds ?? []).length === 0
+                      ? '—'
+                      : (l.carrierRouteIds ?? []).map((rid, i) => (
+                          <span key={rid}>
+                            {i > 0 && ', '}
+                            <Link to={`/carriers/${encodeURIComponent(l.carrierId)}/routes/${encodeURIComponent(rid)}`} className="text-primary-1000 hover:underline">
+                              {rid}
+                            </Link>
+                          </span>
+                        ))}
+                  </td>
                   <td className="num text-xs">{fmtMoney(l.extraCost)}</td>
                 </tr>
               ))}

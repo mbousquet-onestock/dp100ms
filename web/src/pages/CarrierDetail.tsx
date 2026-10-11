@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { errorMessage } from '../api/client';
 import { qk, useCarrierRoutes, useCarriers, useCrud, useServices, useZones } from '../api/hooks';
 import type { Carrier, CarrierRoute } from '../api/types';
@@ -58,6 +58,9 @@ export default function CarrierDetail() {
           <div className="text-xs text-neutral-500">{plural(nRoutes, 'route')}</div>
         </div>
         <div className="flex flex-wrap items-center gap-m">
+          <Link to={`/network?carrier=${encodeURIComponent(carrier.id)}`} className="btn btn-secondary btn-sm" data-testid="carrier-network-link">
+            <IconRoute /> Voir le réseau du transporteur
+          </Link>
           <button className="btn btn-secondary btn-sm" onClick={() => setEdit({ v: carrier, isNew: false })}>
             <IconEdit /> Modifier
           </button>

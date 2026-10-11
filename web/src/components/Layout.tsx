@@ -46,7 +46,7 @@ const NAV: { section?: string; items: NavItem[] }[] = [
     section: 'Réseau logistique',
     items: [
       { to: '/stock-points', label: 'Points de stock', Icon: IconStore },
-      { to: '/network', label: 'Routes et réseau', Icon: IconRoute },
+      { to: '/network', label: 'Réseau', Icon: IconRoute },
       { to: '/hubs', label: 'Hubs', Icon: IconHub },
       { to: '/zones', label: 'Zones', Icon: IconMap },
       { to: '/carriers', label: 'Transporteurs', Icon: IconTruck },
