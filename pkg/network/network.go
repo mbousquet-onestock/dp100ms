@@ -304,8 +304,8 @@ func Compile(s *store.Store) *Network {
 	legs := s.Legs.All()
 	kept := legs[:0:0]
 	for _, lg := range legs {
-		if lg.To == model.CustomerNode && routed[lg.ServiceID] {
-			continue // the carrier routes of the service define its direct legs
+		if routed[lg.ServiceID] {
+			continue // the carrier routes of the service define its legs
 		}
 		kept = append(kept, lg)
 	}

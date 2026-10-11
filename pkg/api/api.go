@@ -831,7 +831,35 @@ func (s *Server) graph(w http.ResponseWriter, r *http.Request) {
 		}
 		nodes = append(nodes, graphNode{ID: h.ID, Name: h.Name, Kind: "HUB", City: h.City, Lat: h.Lat, Lon: h.Lon, Active: h.Active, IsHub: true, Consolidation: h.ConsolidationEnabled})
 	}
-	writeJSON(w, 200, map[string]any{"nodes": nodes, "legs": st.Legs.All(), "routes": st.Routes.All()})
+	// legs of the compiled network: generated from the carrier routes
+	// (generated = true) or stored; stored legs replaced by routes or
+	// inactive are listed with inUse = false
+	net := s.engine().Network()
+	legs := []graphLeg{}
+	used := map[string]bool{}
+	for _, l := range net.Legs {
+		gl := graphLeg{Leg: *l.Leg, Generated: l.FromRoutes, InUse: true, CarrierRouteIDs: nz(l.RouteIDs())}
+		if p := l.DefaultPlan; p != nil && len(gl.Departures) == 0 {
+			gl.Departures = p.Departures
+		}
+		used[l.ID] = true
+		legs = append(legs, gl)
+	}
+	for _, l := range st.Legs.All() {
+		if !used[l.ID] {
+			legs = append(legs, graphLeg{Leg: l, CarrierRouteIDs: []string{}})
+		}
+	}
+	writeJSON(w, 200, map[string]any{"nodes": nodes, "legs": legs, "routes": st.Routes.All()})
+}
+
+type graphLeg struct {
+	model.Leg
+	// Generated: derived from carrier routes (configured in the carrier
+	// screens), not a stored leg.
+	Generated       bool     `json:"generated"`
+	InUse           bool     `json:"inUse"`
+	CarrierRouteIDs []string `json:"carrierRouteIds"`
 }
 
 type compiledPath struct {

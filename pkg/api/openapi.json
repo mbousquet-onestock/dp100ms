@@ -3313,6 +3313,7 @@
     ],
     "operationId": "getNetworkGraph",
     "summary": "Nodes, legs and routes of the network",
+    "description": "Legs of the compiled network. Legs generated from the carrier routes (`generated: true`, ids `RT-…`) are\nconfigured in the carrier screens: `carrierRouteIds` lists the routes applied. Stored legs replaced by carrier\nroutes or inactive are returned with `inUse: false`.\n",
     "responses": {
      "200": {
       "description": "Graph.",
@@ -3330,7 +3331,28 @@
           "legs": {
            "type": "array",
            "items": {
-            "$ref": "#/components/schemas/Leg"
+            "allOf": [
+             {
+              "$ref": "#/components/schemas/Leg"
+             },
+             {
+              "type": "object",
+              "properties": {
+               "generated": {
+                "type": "boolean"
+               },
+               "inUse": {
+                "type": "boolean"
+               },
+               "carrierRouteIds": {
+                "type": "array",
+                "items": {
+                 "type": "string"
+                }
+               }
+              }
+             }
+            ]
            }
           },
           "routes": {

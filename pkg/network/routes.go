@@ -246,10 +246,13 @@ func deliversCustomer(k model.ServiceKind) bool {
 	return k != model.KindLinehaul && k != model.KindShuttle
 }
 
-// routeLegs generates the direct legs defined by the carrier routes: one
-// leg per (stock point of an origin zone, service) covering the union of
-// the destination zones. It also returns the services having such routes:
-// their explicit legs to the customer are replaced.
+// routeLegs generates the legs defined by the carrier routes. For a service
+// delivering the customer: one leg per (stock point of an origin zone,
+// service) covering the union of the destination zones. For a line-haul or
+// shuttle service: one leg per (site of the origin zone, hub of the
+// destination zone; the zone names the hubs, or for last-mile hubs that are
+// stock points, contains them). It also returns the services having routes:
+// their stored legs are replaced.
 func (n *Network) routeLegs(s *store.Store, services map[string]*model.CarrierService) ([]model.Leg, map[string]bool) {
 	routes := s.CarrierRoutes.All()
 	sort.Slice(routes, func(i, j int) bool { return routes[i].ID < routes[j].ID })
@@ -261,14 +264,37 @@ func (n *Network) routeLegs(s *store.Store, services map[string]*model.CarrierSe
 	groups := map[string]*group{}
 	var order []string
 	routed := map[string]bool{}
+	siteSeen := map[string]bool{}
+	var siteLegs []model.Leg
 	for _, r := range routes {
 		svc := services[r.ServiceID]
 		car := n.Carriers[r.CarrierID]
 		origin, dest := n.Zones[r.OriginZoneID], n.Zones[r.DestinationZoneID]
-		if !r.Active || svc == nil || car == nil || !svc.Active || !car.Active || svc.CarrierID != car.ID || !deliversCustomer(svc.Kind) || origin == nil || dest == nil {
+		if !r.Active || svc == nil || car == nil || !svc.Active || !car.Active || svc.CarrierID != car.ID || origin == nil || dest == nil {
 			continue
 		}
 		routed[svc.ID] = true
+		if !deliversCustomer(svc.Kind) {
+			// line-haul / shuttle: one leg per (origin site, destination hub)
+			for _, from := range n.NodeList {
+				if (from.StockPoint == nil && !origin.points[from.ID]) || !origin.ContainsNode(from) {
+					continue
+				}
+				for _, to := range n.NodeList {
+					if to == from || to.Hub == nil || !(dest.points[to.ID] || dest.points[to.Hub.ID] || (to.StockPoint != nil && len(dest.points) == 0 && dest.ContainsNode(to))) {
+						continue
+					}
+					key := svc.ID + "\x00" + from.ID + "\x00" + to.ID
+					if siteSeen[key] {
+						continue
+					}
+					siteSeen[key] = true
+					siteLegs = append(siteLegs, model.Leg{ID: "RT-" + svc.ID + "-" + from.ID + "-" + to.Hub.ID, From: from.ID, To: to.Hub.ID,
+						CarrierID: svc.CarrierID, ServiceID: svc.ID, Active: true})
+				}
+			}
+			continue
+		}
 		for _, node := range n.NodeList {
 			if node.StockPoint == nil && !origin.points[node.ID] {
 				continue // platforms ship only when the zone names them
@@ -323,7 +349,7 @@ func (n *Network) routeLegs(s *store.Store, services map[string]*model.CarrierSe
 		legs = append(legs, model.Leg{ID: "RT-" + g.svc.ID + "-" + g.node.ID, From: g.node.ID, To: model.CustomerNode,
 			CarrierID: g.svc.CarrierID, ServiceID: g.svc.ID, DestinationZones: zones, Active: true})
 	}
-	return legs, routed
+	return append(legs, siteLegs...), routed
 }
 
 // better reports whether route a beats route b for a destination match.
@@ -520,4 +546,26 @@ func (p *LegPlan) Delivery(clk *calendar.Clock, dep, minTransit int64) (int64, i
 		from = minArrival
 	}
 	return from, to, true
+}
+
+// RouteIDs lists the carrier routes applied to a leg (all destinations).
+func (l *Leg) RouteIDs() []string {
+	seen := map[string]bool{}
+	var out []string
+	add := func(p *LegPlan) {
+		if p != nil && p.RouteID != "" && !seen[p.RouteID] {
+			seen[p.RouteID] = true
+			out = append(out, p.RouteID)
+		}
+	}
+	add(l.DefaultPlan)
+	keys := make([]string, 0, len(l.byDept))
+	for d := range l.byDept {
+		keys = append(keys, d)
+	}
+	sort.Strings(keys)
+	for _, d := range keys {
+		add(l.byDept[d])
+	}
+	return out
 }

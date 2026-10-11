@@ -324,12 +324,13 @@ func Generate(cfg Config) *store.Store {
 	}
 
 	// ---------------- legs
-	legSeq := 0
+	// every transport is configured as carrier routes (generateRoutes):
+	// the engine derives the legs, RT-<service>-<from>-<hub> between sites
+	var siteLegs []model.Leg
 	addLeg := func(l model.Leg) string {
-		legSeq++
-		l.ID = fmt.Sprintf("LEG-%04d", legSeq)
+		l.ID = "RT-" + l.ServiceID + "-" + l.From + "-" + l.To
 		l.Active = true
-		s.Legs.LoadRaw(l)
+		siteLegs = append(siteLegs, l)
 		return l.ID
 	}
 	// direct deliveries to the customer are defined by carrier routes
@@ -420,7 +421,7 @@ func Generate(cfg Config) *store.Store {
 		}
 	}
 	// Explicit named 3-leg routes: store -> regional hub -> LMH -> customer.
-	for _, lg := range s.Legs.All() {
+	for _, lg := range siteLegs {
 		if !strings.HasPrefix(lg.From, "STORE-") || !strings.HasPrefix(lg.To, "HUB-") {
 			continue
 		}
@@ -452,6 +453,7 @@ func Generate(cfg Config) *store.Store {
 	generateStock(s, cfg, nil)
 	generatePricing(s)
 	generateRoutes(s, finals)
+	generateSiteRoutes(s, siteLegs)
 	s.LoadSettingsRaw(model.DefaultSettings())
 	generateScenarios(s)
 	s.BumpConfig()

@@ -1,6 +1,7 @@
 package datagen
 
 import (
+	"fmt"
 	"sort"
 	"strings"
 
@@ -304,4 +305,106 @@ func hasTOD(xs []model.TimeOfDay, x model.TimeOfDay) bool {
 		}
 	}
 	return false
+}
+
+// generateSiteRoutes turns the transports between sites (line-haul to the
+// platforms and hubs, shuttles to the last-mile hubs) into carrier routes:
+// one route per service, destination hub, pickup times and transit (hours,
+// rounded up), from the zone of the sites sharing them.
+func generateSiteRoutes(s *store.Store, legs []model.Leg) {
+	services := map[string]model.CarrierService{}
+	for _, sv := range s.Services.All() {
+		services[sv.ID] = sv
+	}
+	names := map[string]string{}
+	for _, sp := range s.StockPoints.All() {
+		names[sp.ID] = sp.Name
+	}
+	for _, h := range s.Hubs.All() {
+		names[h.ID] = h.Name
+	}
+	zoneByPoints := map[string]string{}
+	for _, z := range s.Zones.All() {
+		if len(z.StockPointIDs) > 0 && len(z.Departments) == 0 {
+			pts := append([]string(nil), z.StockPointIDs...)
+			sort.Strings(pts)
+			zoneByPoints[strings.Join(pts, ",")] = z.ID
+		}
+	}
+	zoneFor := func(points []string, id, name string) string {
+		sort.Strings(points)
+		k := strings.Join(points, ",")
+		if z, ok := zoneByPoints[k]; ok {
+			return z
+		}
+		if len(points) == 1 {
+			id, name = "SITE-"+points[0], "Site "+names[points[0]]
+		}
+		s.Zones.LoadRaw(model.Zone{ID: id, Name: name, StockPointIDs: points, Active: true})
+		zoneByPoints[k] = id
+		return id
+	}
+	type group struct {
+		svc, to string
+		hours   int
+		deps    []model.TimeOfDay
+		points  []string
+	}
+	groups := map[string]*group{}
+	var order []string
+	for _, l := range legs {
+		tm := l.TransitMinutes
+		if tm == 0 {
+			tm = services[l.ServiceID].TransitMinutes
+		}
+		// transit rounded up to the hour (shuttles) or to 4 h (line-haul) so
+		// that sites at similar distances share a route
+		step := 1
+		if services[l.ServiceID].Kind == model.KindLinehaul {
+			step = 4
+		}
+		hours := ((tm+59)/60 + step - 1) / step * step
+		deps := append([]model.TimeOfDay(nil), l.Departures...)
+		sort.Slice(deps, func(i, j int) bool { return deps[i] < deps[j] })
+		var dk []string
+		for _, d := range deps {
+			dk = append(dk, d.String())
+		}
+		key := fmt.Sprintf("%s|%s|%d|%s", l.ServiceID, l.To, hours, strings.Join(dk, ","))
+		g := groups[key]
+		if g == nil {
+			g = &group{svc: l.ServiceID, to: l.To, hours: hours, deps: deps}
+			groups[key] = g
+			order = append(order, key)
+		}
+		if !hasString(g.points, l.From) {
+			g.points = append(g.points, l.From)
+		}
+	}
+	sort.Strings(order)
+	grids := map[string]string{"TRANSALP-LH": "RC-TRANSALP", "NAVETTE-REG": "RC-NAVETTE"}
+	vehicles := map[string]string{"TRANSALP-LH": "semi-remorque", "NAVETTE-REG": "fourgon"}
+	seq := map[string]int{}
+	for _, key := range order {
+		g := groups[key]
+		svc := services[g.svc]
+		seq[g.svc+g.to]++
+		dest := zoneFor([]string{g.to}, "SITE-"+g.to, "Site "+names[g.to])
+		origin := zoneFor(append([]string(nil), g.points...), fmt.Sprintf("ORIG-%s-%s-%d", g.svc, g.to, seq[g.svc+g.to]),
+			fmt.Sprintf("Sites desservis par %s vers %s (%d h)", svc.Name, names[g.to], g.hours))
+		pl := &model.RoutePlanning{Timezone: "Europe/Paris", HonorHolidays: svc.PickupCalendar.HonorHolidays}
+		for _, wd := range svc.PickupCalendar.WorkingDays {
+			pl.Days = append(pl.Days, model.RouteDay{Weekday: wd, Pickups: g.deps})
+		}
+		var costs *model.RateCard
+		if rc, ok := s.RateCards.Get(grids[g.svc]); ok {
+			rc.ID, rc.Name, rc.CarrierID, rc.Description = "", "", "", ""
+			costs = &rc
+		}
+		s.CarrierRoutes.LoadRaw(model.CarrierRoute{
+			ID: fmt.Sprintf("%s-%s-%d", g.svc, g.to, seq[g.svc+g.to]), Name: fmt.Sprintf("%s — vers %s", svc.Name, names[g.to]),
+			CarrierID: svc.CarrierID, ServiceID: svc.ID, OriginZoneID: origin, DestinationZoneID: dest,
+			Costs: costs, TransitMinHours: g.hours, TransitMaxHours: g.hours, Planning: pl,
+			Metadata: map[string]string{"vehicule": vehicles[g.svc]}, Active: true})
+	}
 }
