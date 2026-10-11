@@ -70,7 +70,7 @@ The admin token defaults to `dev-admin-token` (set `ADMIN_TOKEN` everywhere else
 - zero stock (≈ 22 %), partial stock, reservations (≈ 9 % of lines), safety stock in stores;
 - article dimensions, prices and attributes (fragile, hazardous, lithium battery, installable, bulky, store collection);
 - 13 rate cards (cost grids per carrier with volumetric weight, oversize and Corsica surcharges, carbon; customer prices with free shipping per mode), restrictions (pick-up point format, cargo bike format, no hazardous goods or lithium batteries by air), 4 associated services, 5 stock views, 5 delivery modes with criteria (STANDARD, EXPRESS, SAME_DAY, RELAY, ECO);
-- 62 carrier routes with weekly plannings over origin zones of shipping points and destination zones (France, Corsica, mountain areas, remote departments, metropolitan areas, regions); every delivery to the customer is configured as routes;
+- 61 carrier routes with weekly plannings over origin zones of shipping points and destination zones (France, Corsica, mountain areas, remote departments, metropolitan areas, regions); every delivery to the customer is configured as routes;
 - 6 fictitious carriers, 11 services, 6 regional consolidation platforms + 10 last-mile hubs, 231 stored legs (shuttle and line-haul) plus 322 direct legs generated from the carrier routes, 12 explicit three-leg routes;
 - varied opening hours, preparation calendars (some stores closed on Monday, some open on Sunday) and cut-offs; restricted zones (no express in Corsica and some mountain departments, same day only in large cities, overseas not served);
 - 8 reference scenarios (single item, multi-source, after cut-off on a Friday, before public holidays, Corsica, overseas, large quantity).
