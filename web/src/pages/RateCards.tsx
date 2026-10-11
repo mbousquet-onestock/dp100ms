@@ -15,10 +15,10 @@ import { outputLabel, RATE_SCOPE_BADGE, RATE_SCOPE_HINT, RATE_SCOPE_LABEL, varLa
 
 const ROOTS = ['rateCard', 'card'];
 
-const emptyCard = (): RateCard => ({
+const emptyCard = (carrierId = ''): RateCard => ({
   id: '',
   name: '',
-  carrierId: '',
+  carrierId,
   scope: 'PARCEL',
   currency: 'EUR',
   volumetricDivisor: 5000,
@@ -34,7 +34,7 @@ export default function RateCards() {
   const id = params.get('id');
   const isNew = params.get('new') === '1';
   const close = () => setParams({}, { replace: false });
-  if (id || isNew) return <EditorLoader id={id} onClose={close} onSaved={(cid) => setParams({ id: cid }, { replace: true })} />;
+  if (id || isNew) return <EditorLoader id={id} carrierId={params.get('carrierId') ?? ''} onClose={close} onSaved={(cid) => setParams({ id: cid }, { replace: true })} />;
   return <RateCardList onOpen={(cid) => setParams({ id: cid })} onNew={() => setParams({ new: '1' })} />;
 }
 
@@ -140,9 +140,9 @@ function RateCardList({ onOpen, onNew }: { onOpen: (id: string) => void; onNew: 
 // ---------------------------------------------------------------------------
 // Editor
 
-function EditorLoader({ id, onClose, onSaved }: { id: string | null; onClose: () => void; onSaved: (id: string) => void }) {
+function EditorLoader({ id, carrierId, onClose, onSaved }: { id: string | null; carrierId: string; onClose: () => void; onSaved: (id: string) => void }) {
   const card = useQuery({ queryKey: ['rate-cards', 'one', id], queryFn: () => api.get<RateCard>(`/rate-cards/${encodeURIComponent(id!)}`), enabled: !!id });
-  if (!id) return <Editor key="new" initial={emptyCard()} isNew onClose={onClose} onSaved={onSaved} />;
+  if (!id) return <Editor key={`new-${carrierId}`} initial={emptyCard(carrierId)} isNew onClose={onClose} onSaved={onSaved} />;
   if (card.isLoading) return <Loading />;
   if (card.error)
     return (

@@ -9,6 +9,8 @@ import type {
   QuoteRequest,
   QuoteResponse,
   RateCard,
+  SchedulePreview,
+  SchedulePreviewRequest,
   StockView,
   StockViewPreview,
   Carrier,
@@ -214,6 +216,13 @@ export const useQuote = () =>
   useMutation({
     mutationFn: ({ id, body }: { id?: string; body: QuoteRequest }) =>
       api.post<QuoteResponse>(id ? `/rate-cards/${encodeURIComponent(id)}/quote` : '/rate-cards/quote', body, false),
+  });
+
+/** Preview the schedule layers applied to a service / postal code / ready time. */
+export const useSchedulePreview = () =>
+  useMutation({
+    mutationFn: ({ carrierId, body }: { carrierId: string; body: SchedulePreviewRequest }) =>
+      api.post<SchedulePreview>(`/carriers/${encodeURIComponent(carrierId)}/schedule-preview`, body, false),
   });
 
 export const useDatabaseStatus = (token: string) =>

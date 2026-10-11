@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { ApiError, errorMessage } from '../api/client';
 import { qk, useAdditionalServices, useCarriers, useCrud, useModes, useRateCards, useServices } from '../api/hooks';
 import type { Carrier, CarrierService } from '../api/types';
@@ -8,6 +9,15 @@ import { Badge, Card, ChipSelect, ConfirmButton, cx, Drawer, EmptyState, ErrorAl
 import { fmtMoney } from '../lib/format';
 import { RATE_SCOPE_LABEL, SERVICE_KIND_LABEL } from '../lib/labels';
 import { RestrictionsEditor } from '../components/pricing/RuleBuilder';
+import { CarrierRateCards } from '../components/carrier/CarrierRateCards';
+import { CarrierSchedules } from '../components/carrier/CarrierSchedules';
+
+type CarrierTab = 'services' | 'cards' | 'schedules';
+const TABS: { value: CarrierTab; label: string }[] = [
+  { value: 'services', label: 'Services' },
+  { value: 'cards', label: 'Grilles de coût' },
+  { value: 'schedules', label: 'Plannings de livraison' },
+];
 
 const emptyService = (carrierId: string): CarrierService => ({
   id: '',
@@ -35,20 +45,35 @@ const emptyService = (carrierId: string): CarrierService => ({
 
 export default function Carriers() {
   const carriers = useCarriers();
-  const [selected, setSelected] = useState<string | null>(null);
+  const [params, setParams] = useSearchParams();
+  const selected = params.get('carrier');
+  const tab = (TABS.find((t) => t.value === params.get('tab'))?.value ?? 'services') as CarrierTab;
+  const setSelected = (id: string | null) => {
+    const next = new URLSearchParams(params);
+    if (id) next.set('carrier', id);
+    else next.delete('carrier');
+    setParams(next, { replace: true });
+  };
+  const setTab = (t: CarrierTab) => {
+    const next = new URLSearchParams(params);
+    next.set('tab', t);
+    setParams(next, { replace: true });
+  };
   const [editCarrier, setEditCarrier] = useState<{ v: Carrier; isNew: boolean } | null>(null);
   const crud = useCrud<Carrier>('carriers', [qk.carriers]);
   const toast = useToast();
 
   useEffect(() => {
     if (!selected && carriers.data?.items.length) setSelected(carriers.data.items[0].id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [carriers.data, selected]);
+  const current = carriers.data?.items.find((c) => c.id === selected);
 
   return (
     <div>
       <PageHeader
         title="Transporteurs et services"
-        subtitle="Transporteurs, services de transport, couvertures, calendriers et coûts"
+        subtitle="Transporteurs, services, grilles de coût et plannings de livraison"
         actions={
           <button className="btn btn-primary" onClick={() => setEditCarrier({ v: { id: '', name: '', active: true }, isNew: true })}>
             <IconPlus /> Créer un transporteur
@@ -110,7 +135,32 @@ export default function Carriers() {
             </table>
           )}
         </Card>
-        {selected ? <ServicesCard carrier={carriers.data?.items.find((c) => c.id === selected)} carrierId={selected} /> : <Card title="Services"><EmptyState title="Sélectionner un transporteur" /></Card>}
+        {selected && current ? (
+          <Card
+            title={current.name}
+            icon={<IconTruck size={20} />}
+            bodyClassName=""
+            className="min-w-0"
+            actions={
+              <span className="text-xs text-neutral-500">
+                {(current.rateCardIds ?? []).length} grille{(current.rateCardIds ?? []).length > 1 ? 's' : ''} par défaut · {(current.schedules ?? []).length} planning{(current.schedules ?? []).length > 1 ? 's' : ''}
+              </span>
+            }
+          >
+            <div className="tabs" role="tablist">
+              {TABS.map((t) => (
+                <button key={t.value} type="button" role="tab" aria-selected={tab === t.value} onClick={() => setTab(t.value)}>
+                  {t.label}
+                </button>
+              ))}
+            </div>
+            {tab === 'services' && <ServicesTab carrierId={current.id} />}
+            {tab === 'cards' && <CarrierRateCards key={current.id} carrier={current} />}
+            {tab === 'schedules' && <CarrierSchedules key={current.id} carrier={current} />}
+          </Card>
+        ) : (
+          <Card title="Transporteur">{carriers.isLoading ? <Loading /> : <EmptyState title="Sélectionner un transporteur" />}</Card>
+        )}
       </div>
 
       <CarrierDrawer state={editCarrier} onClose={() => setEditCarrier(null)} crud={crud} />
@@ -163,21 +213,19 @@ function CarrierDrawer({ state, onClose, crud }: { state: { v: Carrier; isNew: b
   );
 }
 
-function ServicesCard({ carrierId, carrier }: { carrierId: string; carrier?: Carrier }) {
+function ServicesTab({ carrierId }: { carrierId: string }) {
   const services = useServices(carrierId);
   const crud = useCrud<CarrierService>('services', [['services']]);
   const toast = useToast();
   const [edit, setEdit] = useState<{ v: CarrierService; isNew: boolean } | null>(null);
   return (
-    <Card
-      title={`Services · ${carrier?.name ?? carrierId}`}
-      bodyClassName="overflow-x-auto"
-      actions={
+    <div className="overflow-x-auto">
+      <div className="flex items-center justify-between gap-m px-xl py-l">
+        <span className="text-xs text-neutral-500">Sans grille ni planning propre, un service reprend les grilles par défaut et les plannings du transporteur.</span>
         <button className="btn btn-secondary btn-sm" onClick={() => setEdit({ v: emptyService(carrierId), isNew: true })}>
           <IconPlus /> Ajouter un service
         </button>
-      }
-    >
+      </div>
       {services.isLoading ? (
         <Loading />
       ) : services.error ? (
@@ -246,7 +294,7 @@ function ServicesCard({ carrierId, carrier }: { carrierId: string; carrier?: Car
         </table>
       )}
       <ServiceDrawer state={edit} onClose={() => setEdit(null)} crud={crud} />
-    </Card>
+    </div>
   );
 }
 
@@ -269,6 +317,9 @@ function ServiceDrawer({ state, onClose, crud }: { state: { v: CarrierService; i
   const fe = m.error instanceof ApiError ? m.error.byField : {};
   if (!v) return null;
   const set = <K extends keyof CarrierService>(k: K, val: CarrierService[K]) => setV((x) => (x ? { ...x, [k]: val } : x));
+  const owner = carriers.data?.items.find((c) => c.id === v.carrierId);
+  const ownerCards = owner?.rateCardIds ?? [];
+  const ownerSchedules = (owner?.schedules ?? []).filter((s) => s.active && (!(s.serviceIds ?? []).length || (v.id && s.serviceIds!.includes(v.id))));
   return (
     <Drawer
       open={!!state}
@@ -357,6 +408,10 @@ function ServiceDrawer({ state, onClose, crud }: { state: { v: CarrierService; i
               <Switch checked={v.deliveryCalendar.honorHolidays} onChange={(b) => set('deliveryCalendar', { ...v.deliveryCalendar, honorHolidays: b })} label="Pas de livraison les jours fériés" />
             </div>
           </Field>
+          <p className="m-0 text-xs text-neutral-500 sm:col-span-2" data-testid="service-schedule-hint">
+            Calendriers, cut-off, transit et créneau ci-dessous sont les valeurs de base du service. Les plannings de livraison du transporteur s'y superposent
+            {ownerSchedules.length ? ` (${ownerSchedules.length} planning${ownerSchedules.length > 1 ? 's' : ''} actif${ownerSchedules.length > 1 ? 's' : ''} : ${ownerSchedules.map((s) => s.name || s.id).join(', ')})` : ' (aucun planning actif pour ce service)'}.
+          </p>
           <Field label="Cut-off">
             <input type="time" className="input" value={v.cutoff} onChange={(e) => set('cutoff', e.target.value)} />
           </Field>
@@ -398,7 +453,12 @@ function ServiceDrawer({ state, onClose, crud }: { state: { v: CarrierService; i
         </div>
         <div>
           <div className="os-title-s mb-s">Grilles tarifaires</div>
-          <p className="m-0 mb-m text-xs text-neutral-500">Grilles colis ou expédition évaluées pour chaque transport de ce service. Sans grille, le coût de base et le coût par kg s'appliquent.</p>
+          <p className="m-0 mb-m text-xs text-neutral-500">Grilles colis ou expédition évaluées pour chaque transport de ce service.{' '}
+            {ownerCards.length
+              ? `Sans grille sur le service, les grilles par défaut du transporteur s'appliquent : ${ownerCards.join(', ')}.`
+              : "Sans grille sur le service ni grille par défaut du transporteur, le coût de base et le coût par kg s'appliquent."}{' '}
+            Un planning ou un leg peut les remplacer.
+          </p>
           <ChipSelect
             options={(cards.data?.items ?? [])
               .filter((c) => c.scope !== 'ORDER')

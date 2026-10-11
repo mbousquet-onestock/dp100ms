@@ -66,6 +66,45 @@ export interface Carrier {
   id: string;
   name: string;
   active: boolean;
+  /** Default cost grids of every service of the carrier. */
+  rateCardIds?: string[];
+  /** Delivery plannings (layered: carrier, service, zone, service + zone). */
+  schedules?: DeliverySchedule[];
+}
+
+export interface DeliverySchedule {
+  id: string;
+  name: string;
+  serviceIds?: string[];
+  zones?: string[];
+  pickupDays?: number[];
+  cutoff?: TimeOfDay;
+  deliveryDays?: number[];
+  transitDays?: number;
+  windowStart?: TimeOfDay;
+  windowEnd?: TimeOfDay;
+  honorHolidays: boolean;
+  closedDates?: string[];
+  rateCardIds?: string[];
+  active: boolean;
+}
+
+export interface SchedulePreviewRequest {
+  serviceId: string;
+  postalCode: string;
+  readyAt: string;
+}
+
+export interface SchedulePreview {
+  /** Schedule layers applied, in order. */
+  scheduleIds?: string[];
+  pickupDays: number[];
+  cutoff: TimeOfDay;
+  departure: string;
+  deliveryDays: number[];
+  transitDays: number;
+  delivery: { from: string; to: string };
+  rateCardIds: string[];
 }
 
 export type ServiceKind =

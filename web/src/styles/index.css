@@ -257,6 +257,21 @@
     box-shadow: inset 0 0 0 1px var(--border-brand);
   }
 
+  /* Tabs (underlined, OneStock) */
+  .tabs {
+    @apply flex gap-xl overflow-x-auto border-b border-border px-xl;
+  }
+  .tabs button {
+    @apply -mb-px whitespace-nowrap border-b-2 border-transparent py-l text-s font-medium text-neutral-700;
+  }
+  .tabs button:hover {
+    color: var(--primary-1000);
+  }
+  .tabs button[aria-selected='true'] {
+    border-color: var(--border-brand);
+    color: var(--primary-1000);
+  }
+
   /* Toggle switch */
   .switch {
     @apply relative inline-flex h-[20px] w-[36px] flex-none cursor-pointer items-center rounded-round;
