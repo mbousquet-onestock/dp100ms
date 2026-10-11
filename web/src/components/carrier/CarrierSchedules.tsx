@@ -28,19 +28,19 @@ export function slugify(s: string): string {
     .normalize('NFD')
     .replace(/[̀-ͯ]/g, '')
     .toUpperCase()
-    .replace(/[^A-Z0-9]+/g, '_')
-    .replace(/^_+|_+$/g, '')
+    .replace(/[^A-Z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
     .slice(0, 40);
 }
 
 /** Fills empty ids from the name, keeping them unique. */
-function withIds(list: DeliverySchedule[]): DeliverySchedule[] {
+function withIds(list: DeliverySchedule[], carrierId: string): DeliverySchedule[] {
   const used = new Set(list.map((s) => s.id).filter(Boolean));
   return list.map((s, i) => {
     if (s.id) return s;
-    const base = slugify(s.name) || `PLANNING_${i + 1}`;
+    const base = `${carrierId}-${slugify(s.name) || `PLANNING-${i + 1}`}`;
     let id = base;
-    for (let n = 2; used.has(id); n++) id = `${base}_${n}`;
+    for (let n = 2; used.has(id); n++) id = `${base}-${n}`;
     used.add(id);
     return { ...s, id };
   });
@@ -78,7 +78,7 @@ export function CarrierSchedules({ carrier }: { carrier: Carrier }) {
     setOpen(null);
   };
   const save = () => {
-    const list = withIds(draft);
+    const list = withIds(draft, carrier.id);
     setDraft(list);
     crud.update.mutate(cleanCarrier({ ...carrier, schedules: list }), {
       onSuccess: () => toast('Plannings enregistrés'),
@@ -224,7 +224,7 @@ function ScheduleItem({
               <input className={cx('input', fe.name && 'invalid')} value={s.name} onChange={(e) => set('name', e.target.value)} aria-label="Nom du planning" />
             </Field>
             <Field label="Identifiant" error={fe.id} hint="Vide = généré à partir du nom">
-              <input className={cx('input', fe.id && 'invalid')} value={s.id} placeholder={slugify(s.name) || 'PLANNING'} onChange={(e) => set('id', e.target.value)} />
+              <input className={cx('input', fe.id && 'invalid')} value={s.id} placeholder={`${carrierId}-${slugify(s.name) || 'PLANNING'}`} onChange={(e) => set('id', e.target.value)} />
             </Field>
             <Field label="Services" className="sm:col-span-2" error={errorsStarting(fe, 'serviceIds')[0]} hint="Aucun service sélectionné = tous les services du transporteur">
               {services.length ? (
@@ -237,13 +237,13 @@ function ScheduleItem({
               <ListInput value={s.zones} onChange={(v) => set('zones', v)} placeholder="20, 2A, 2B" invalid={errorsStarting(fe, 'zones').length > 0} />
             </Field>
             <div />
-            <Field label="Jours d'enlèvement" error={errorsStarting(fe, 'pickupDays')[0]} hint="Aucun jour = valeur du service">
+            <Field label="Jours d'enlèvement" error={errorsStarting(fe, 'pickupDays')[0]} hint={s.pickupDays?.length ? 'Remplace les jours du service' : 'Aucun jour = valeur du service'}>
               <WeekdayToggles value={s.pickupDays ?? []} onChange={(v) => set('pickupDays', v)} />
             </Field>
             <Field label="Cut-off" error={fe.cutoff} hint="Dernière remise pour un enlèvement le jour même, vide = valeur du service">
               <TimeInput value={s.cutoff} onChange={(v) => set('cutoff', v)} invalid={!!fe.cutoff} label="Cut-off" />
             </Field>
-            <Field label="Jours de livraison" error={errorsStarting(fe, 'deliveryDays')[0]} hint="Aucun jour = valeur du service">
+            <Field label="Jours de livraison" error={errorsStarting(fe, 'deliveryDays')[0]} hint={s.deliveryDays?.length ? 'Remplace les jours du service' : 'Aucun jour = valeur du service'}>
               <WeekdayToggles value={s.deliveryDays ?? []} onChange={(v) => set('deliveryDays', v)} />
             </Field>
             <Field label="Transit (jours de livraison)" error={fe.transitDays} hint="0 = jour même, vide = valeur du service">
