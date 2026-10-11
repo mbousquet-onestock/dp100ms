@@ -4,11 +4,12 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { ApiError, api, errorMessage } from '../api/client';
 import { qk, useAdditionalServices, useAllStockPoints, useModes, useRunScenario, useScenarios, useSimulate, useStockViews, type Timed } from '../api/hooks';
 import { CriteriaEditor } from '../components/pricing/CriteriaEditor';
-import type { AlternativesSort, PackageAlternative, PackageResult, PromiseOption, Scenario, SimulationResponse } from '../api/types';
+import type { AlternativesSort, PackageAlternative, PackageResult, PromiseOption, PromiseRequest, Scenario, SimulationResponse } from '../api/types';
 import { IconBox, IconChevronDown, IconChevronUp, IconClock, IconEuro, IconHub, IconLeaf, IconMap, IconPlay, IconPlus, IconRoute, IconTool, IconTrash } from '../components/Icons';
 import { FlowDiagram } from '../components/sim/FlowDiagram';
 import { JourneyMap } from '../components/sim/JourneyMap';
 import { SkuInput } from '../components/sim/SkuInput';
+import { ApiPayload } from '../components/sim/ApiPayload';
 import { Alert, Badge, Card, Checkbox, ChipSelect, cx, EmptyState, ErrorAlert, Field, Modal, NumberInput, PageHeader, ScoreBar, Spinner, Switch, useToast } from '../components/ui';
 import { fmtCarbon, fmtDateTime, fmtInt, fmtKm, fmtMoney, fmtMs, fmtNum, fmtShort, fmtWindow } from '../lib/format';
 import { ADDITIONAL_KIND_LABEL, metricLabel, modeBadge, NODE_BADGE, outputLabel, PACKAGE_COLORS, STOCK_POINT_TYPE_LABEL, SHIPMENT_KIND_LABEL, STRATEGY_BADGE, STRATEGY_LABEL, TIMELINE_LABEL, UNAVAILABLE_LABEL } from '../lib/labels';
@@ -21,6 +22,7 @@ export default function Simulator() {
   const [selected, setSelected] = useState<string | null>(null);
   const [scenarioId, setScenarioId] = useState('');
   const [saveOpen, setSaveOpen] = useState(false);
+  const [sent, setSent] = useState<PromiseRequest | null>(null);
   const [params, setParams] = useSearchParams();
   const modes = useModes();
   const views = useStockViews();
@@ -38,7 +40,9 @@ export default function Simulator() {
 
   const run = () => {
     runScenario.reset();
-    simulate.mutate(toRequest(form), { onSuccess: onResult });
+    const req = toRequest(form);
+    setSent(req);
+    simulate.mutate(req, { onSuccess: onResult });
   };
   const loadScenario = (id: string) => {
     if (!id) return;
@@ -46,6 +50,7 @@ export default function Simulator() {
     runScenario.mutate(id, {
       onSuccess: (r) => {
         setForm((f) => fromRequest(r.data.request, f));
+        setSent(r.data.request);
         onResult(r);
       },
     });
@@ -269,6 +274,9 @@ export default function Simulator() {
           ) : (
             <Results result={result} selected={selected} onSelect={setSelected} pending={pending} />
           )}
+          <div className="mt-l">
+            <ApiPayload request={sent ?? result?.data.request ?? null} response={error ? null : (result?.data ?? null)} error={error} />
+          </div>
         </div>
       </div>
 
