@@ -541,7 +541,13 @@ func (c *reqCtx) scorePlans(mode string, plans []*plan) {
 					return d < 0
 				}
 			}
-			return plans[a].score > plans[b].score
+			if plans[a].score != plans[b].score {
+				return plans[a].score > plans[b].score
+			}
+			if plans[a].window.To != plans[b].window.To {
+				return plans[a].window.To < plans[b].window.To
+			}
+			return tieBreak(plans[a], plans[b]) // equal on every priority
 		})
 		return
 	}
@@ -552,8 +558,17 @@ func (c *reqCtx) scorePlans(mode string, plans []*plan) {
 		if plans[a].window.To != plans[b].window.To {
 			return plans[a].window.To < plans[b].window.To
 		}
-		return plans[a].cost < plans[b].cost
+		return tieBreak(plans[a], plans[b])
 	})
+}
+
+// tieBreak orders plans equal on the mode criteria: cheapest for the
+// merchant, then lowest carbon (usually the closest shipping point).
+func tieBreak(a, b *plan) bool {
+	if math.Abs(a.cost-b.cost) > 1e-6 {
+		return a.cost < b.cost
+	}
+	return a.metrics[pricing.OutCarbon] < b.metrics[pricing.OutCarbon]
 }
 
 // selectors are the per-shipment path choices explored for a mode: fastest,
@@ -631,10 +646,13 @@ func (c *reqCtx) alternatives(p *plan, s *shipPlan, pc parcel) []model.PackageAl
 		if best == nil {
 			continue
 		}
+		w := best.timing.window
+		w.From += c.ops.reception // reception operation of the mode
+		w.To += c.ops.reception
 		a := alt{PackageAlternative: model.PackageAlternative{
 			StockPointID: cd.node.ID, Name: cd.node.Name, Type: string(cd.node.Kind), City: cd.node.StockPoint.Address.City,
-			EstimatedDelivery: model.TimeWindow{From: c.clk.Time(best.timing.window.From), To: c.clk.Time(best.timing.window.To)},
-			DeliveryHours:     math.Round(float64(best.timing.window.To-c.orderU)/360) / 10,
+			EstimatedDelivery: model.TimeWindow{From: c.clk.Time(w.From), To: c.clk.Time(w.To)},
+			DeliveryHours:     math.Round(float64(w.To-c.orderU)/360) / 10,
 			Parcels:           len(best.parcels), Metrics: c.net.Registry.Map(best.metrics),
 			Current: cd.node.ID == s.origin && s.kind == "DIRECT",
 		}}

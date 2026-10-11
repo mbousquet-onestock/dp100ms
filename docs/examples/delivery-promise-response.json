@@ -1,0 +1,989 @@
+{
+    "requestId": "req-1791736028779-1",
+    "bestByMode": [
+        {
+            "deliveryMode": "STANDARD",
+            "optionId": "option-2",
+            "strategy": "SINGLE_SOURCE",
+            "estimatedDelivery": {
+                "from": "2026-10-13T09:00:00+02:00",
+                "to": "2026-10-13T13:00:00+02:00"
+            },
+            "leadTimeHours": 27,
+            "cost": 6.41,
+            "price": 0,
+            "carbonKg": 0.01,
+            "currency": "EUR",
+            "packages": 1,
+            "carriers": [
+                {
+                    "carrierId": "URBIKE",
+                    "carrierName": "Urbike Logistique",
+                    "serviceId": "URBIKE-AM",
+                    "serviceName": "Urbike tournée matin",
+                    "routeIds": [
+                        "URBIKE-AM-METRO-LYON"
+                    ],
+                    "packages": 1
+                }
+            ],
+            "shippingPoints": [
+                "WH-02"
+            ],
+            "alternativeShippingPoints": [
+                "STORE-020",
+                "STORE-026",
+                "STORE-074"
+            ]
+        },
+        {
+            "deliveryMode": "EXPRESS",
+            "optionId": "option-3",
+            "strategy": "SINGLE_SOURCE",
+            "estimatedDelivery": {
+                "from": "2026-10-12T17:00:00+02:00",
+                "to": "2026-10-12T21:00:00+02:00"
+            },
+            "leadTimeHours": 11,
+            "cost": 27.42,
+            "price": 0,
+            "carbonKg": 1.717,
+            "currency": "EUR",
+            "packages": 1,
+            "carriers": [
+                {
+                    "carrierId": "URBIKE",
+                    "carrierName": "Urbike Logistique",
+                    "serviceId": "URBIKE-SFS",
+                    "serviceName": "Urbike livraison depuis magasin",
+                    "routeIds": [
+                        "URBIKE-SFS-METRO-LYON"
+                    ],
+                    "packages": 1
+                }
+            ],
+            "shippingPoints": [
+                "STORE-026"
+            ],
+            "alternativeShippingPoints": [
+                "STORE-020",
+                "WH-01"
+            ]
+        },
+        {
+            "deliveryMode": "RELAY",
+            "optionId": "option-1",
+            "strategy": "SINGLE_SOURCE",
+            "estimatedDelivery": {
+                "from": "2026-10-14T12:00:00+02:00",
+                "to": "2026-10-14T21:00:00+02:00"
+            },
+            "leadTimeHours": 59,
+            "cost": 7.1,
+            "price": 0,
+            "carbonKg": 0.054,
+            "currency": "EUR",
+            "packages": 1,
+            "carriers": [
+                {
+                    "carrierId": "RELAISPLUS",
+                    "carrierName": "Relais Plus",
+                    "serviceId": "RELAIS-STD",
+                    "serviceName": "Relais Plus 48h",
+                    "routeIds": [
+                        "RELAIS-STD-STORE-FR-HORS-CORSE"
+                    ],
+                    "packages": 1
+                }
+            ],
+            "shippingPoints": [
+                "STORE-020"
+            ],
+            "alternativeShippingPoints": [
+                "STORE-026",
+                "STORE-036"
+            ]
+        }
+    ],
+    "options": [
+        {
+            "id": "option-1",
+            "deliveryMode": "RELAY",
+            "strategy": "SINGLE_SOURCE",
+            "estimatedDelivery": {
+                "from": "2026-10-14T12:00:00+02:00",
+                "to": "2026-10-14T21:00:00+02:00"
+            },
+            "totalPackages": 1,
+            "packagesBeforeConsolidation": 1,
+            "totalCost": 7.1,
+            "currency": "EUR",
+            "packages": [
+                {
+                    "packageId": "PKG-001",
+                    "items": [
+                        {
+                            "sku": "SKU-00002",
+                            "quantity": 2
+                        },
+                        {
+                            "sku": "SKU-00007",
+                            "quantity": 1
+                        }
+                    ],
+                    "sourceStockPoints": [
+                        "STORE-020"
+                    ],
+                    "weightKg": 4.1,
+                    "volumeL": 20.1,
+                    "route": [
+                        {
+                            "legId": "RT-RELAIS-STD-STORE-020",
+                            "from": "STORE-020",
+                            "to": "CUSTOMER",
+                            "carrier": "RELAISPLUS",
+                            "carrierName": "Relais Plus",
+                            "service": "RELAIS-STD",
+                            "serviceName": "Relais Plus 48h",
+                            "routeId": "RELAIS-STD-STORE-FR-HORS-CORSE",
+                            "serviceKind": "RELAY",
+                            "estimatedDeparture": "2026-10-12T16:30:00+02:00",
+                            "estimatedArrival": "2026-10-14T19:00:00+02:00",
+                            "distanceKm": 32.5,
+                            "metrics": {
+                                "carbonKg": 0.054,
+                                "cost": 4.6,
+                                "price": 0
+                            },
+                            "cost": 4.6
+                        }
+                    ],
+                    "hubs": [],
+                    "estimatedDelivery": {
+                        "from": "2026-10-14T12:00:00+02:00",
+                        "to": "2026-10-14T21:00:00+02:00"
+                    },
+                    "leadTimeHours": 59,
+                    "distanceKm": 32.5,
+                    "metrics": {
+                        "carbonKg": 0.054,
+                        "cost": 7.1,
+                        "price": 0
+                    },
+                    "alternatives": [
+                        {
+                            "stockPointId": "STORE-020",
+                            "name": "Magasin Lyon 1",
+                            "type": "STORE",
+                            "city": "Lyon",
+                            "distanceKm": 32.5,
+                            "estimatedDelivery": {
+                                "from": "2026-10-14T12:00:00+02:00",
+                                "to": "2026-10-14T21:00:00+02:00"
+                            },
+                            "deliveryHours": 59,
+                            "parcels": 1,
+                            "carriers": [
+                                "RELAISPLUS"
+                            ],
+                            "route": [
+                                "CUSTOMER"
+                            ],
+                            "metrics": {
+                                "carbonKg": 0.054,
+                                "cost": 4.6,
+                                "price": 0
+                            },
+                            "current": true
+                        },
+                        {
+                            "stockPointId": "STORE-026",
+                            "name": "Magasin Villeurbanne 1",
+                            "type": "STORE",
+                            "city": "Villeurbanne",
+                            "distanceKm": 34.3,
+                            "estimatedDelivery": {
+                                "from": "2026-10-14T12:00:00+02:00",
+                                "to": "2026-10-14T21:00:00+02:00"
+                            },
+                            "deliveryHours": 59,
+                            "parcels": 1,
+                            "carriers": [
+                                "RELAISPLUS"
+                            ],
+                            "route": [
+                                "CUSTOMER"
+                            ],
+                            "metrics": {
+                                "carbonKg": 0.055,
+                                "cost": 4.6,
+                                "price": 0
+                            },
+                            "current": false
+                        },
+                        {
+                            "stockPointId": "STORE-036",
+                            "name": "Magasin Bordeaux 3",
+                            "type": "STORE",
+                            "city": "Bordeaux",
+                            "distanceKm": 528.6,
+                            "estimatedDelivery": {
+                                "from": "2026-10-14T12:00:00+02:00",
+                                "to": "2026-10-14T21:00:00+02:00"
+                            },
+                            "deliveryHours": 59,
+                            "parcels": 1,
+                            "carriers": [
+                                "RELAISPLUS"
+                            ],
+                            "route": [
+                                "CUSTOMER"
+                            ],
+                            "metrics": {
+                                "carbonKg": 0.42,
+                                "cost": 4.6,
+                                "price": 0
+                            },
+                            "current": false
+                        }
+                    ]
+                }
+            ],
+            "allocations": [
+                {
+                    "stockPointId": "STORE-020",
+                    "sku": "SKU-00002",
+                    "quantity": 2
+                },
+                {
+                    "stockPointId": "STORE-020",
+                    "sku": "SKU-00007",
+                    "quantity": 1
+                }
+            ],
+            "preparationGroups": [
+                {
+                    "id": "PREP-001",
+                    "stockPointId": "STORE-020",
+                    "items": [
+                        {
+                            "sku": "SKU-00002",
+                            "quantity": 2
+                        },
+                        {
+                            "sku": "SKU-00007",
+                            "quantity": 1
+                        }
+                    ],
+                    "readyAt": "2026-10-12T12:45:00+02:00",
+                    "parcels": 1
+                }
+            ],
+            "shipments": [
+                {
+                    "id": "SHP-001",
+                    "packageId": "PKG-001",
+                    "kind": "DIRECT",
+                    "origin": "STORE-020",
+                    "destination": "CUSTOMER",
+                    "items": [
+                        {
+                            "sku": "SKU-00002",
+                            "quantity": 2
+                        },
+                        {
+                            "sku": "SKU-00007",
+                            "quantity": 1
+                        }
+                    ],
+                    "legs": [
+                        {
+                            "legId": "RT-RELAIS-STD-STORE-020",
+                            "from": "STORE-020",
+                            "to": "CUSTOMER",
+                            "carrier": "RELAISPLUS",
+                            "carrierName": "Relais Plus",
+                            "service": "RELAIS-STD",
+                            "serviceName": "Relais Plus 48h",
+                            "routeId": "RELAIS-STD-STORE-FR-HORS-CORSE",
+                            "serviceKind": "RELAY",
+                            "estimatedDeparture": "2026-10-12T16:30:00+02:00",
+                            "estimatedArrival": "2026-10-14T19:00:00+02:00",
+                            "distanceKm": 32.5,
+                            "metrics": {
+                                "carbonKg": 0.054,
+                                "cost": 4.6,
+                                "price": 0
+                            },
+                            "cost": 4.6
+                        }
+                    ]
+                }
+            ],
+            "consolidations": [],
+            "timeline": [
+                {
+                    "at": "2026-10-12T10:00:00+02:00",
+                    "type": "ORDER",
+                    "node": "CUSTOMER",
+                    "description": "Order placed"
+                },
+                {
+                    "at": "2026-10-12T12:45:00+02:00",
+                    "type": "PREPARATION_READY",
+                    "node": "STORE-020",
+                    "description": "Preparation ready at Magasin Lyon 1"
+                },
+                {
+                    "at": "2026-10-12T16:30:00+02:00",
+                    "type": "DEPARTURE",
+                    "node": "STORE-020",
+                    "description": "SHP-001 departs Magasin Lyon 1 (Relais Plus)"
+                },
+                {
+                    "at": "2026-10-14T21:00:00+02:00",
+                    "type": "DELIVERY",
+                    "node": "CUSTOMER",
+                    "packageId": "PKG-001",
+                    "description": "Delivery of PKG-001 between 14/10 12:00 and 14/10 21:00"
+                }
+            ],
+            "criteria": {
+                "price": 0,
+                "carbonKg": 0.054,
+                "deliveryHours": 59,
+                "packages": 1,
+                "cost": 7.1,
+                "legs": 1,
+                "sources": 1
+            },
+            "metrics": {
+                "carbonKg": 0.054,
+                "cost": 7.1,
+                "price": 0
+            },
+            "additionalServices": [],
+            "stockViewId": "WEB-CATALOG",
+            "score": 1
+        },
+        {
+            "id": "option-2",
+            "deliveryMode": "STANDARD",
+            "strategy": "SINGLE_SOURCE",
+            "estimatedDelivery": {
+                "from": "2026-10-13T09:00:00+02:00",
+                "to": "2026-10-13T13:00:00+02:00"
+            },
+            "totalPackages": 1,
+            "packagesBeforeConsolidation": 1,
+            "totalCost": 6.41,
+            "currency": "EUR",
+            "packages": [
+                {
+                    "packageId": "PKG-001",
+                    "items": [
+                        {
+                            "sku": "SKU-00002",
+                            "quantity": 2
+                        },
+                        {
+                            "sku": "SKU-00007",
+                            "quantity": 1
+                        }
+                    ],
+                    "sourceStockPoints": [
+                        "WH-02"
+                    ],
+                    "weightKg": 4.1,
+                    "volumeL": 20.1,
+                    "route": [
+                        {
+                            "legId": "LEG-0137",
+                            "from": "WH-02",
+                            "to": "LMH-03",
+                            "carrier": "TRANSALP",
+                            "carrierName": "Transalp Messagerie",
+                            "service": "TRANSALP-LH",
+                            "serviceName": "Transalp traction de nuit",
+                            "serviceKind": "LINEHAUL",
+                            "estimatedDeparture": "2026-10-12T21:00:00+02:00",
+                            "estimatedArrival": "2026-10-12T22:00:00+02:00",
+                            "distanceKm": 11.3,
+                            "metrics": {
+                                "carbonKg": 0.005,
+                                "cost": 0.61,
+                                "price": 0
+                            },
+                            "cost": 0.61
+                        },
+                        {
+                            "legId": "RT-URBIKE-AM-LMH-03",
+                            "from": "LMH-03",
+                            "to": "CUSTOMER",
+                            "carrier": "URBIKE",
+                            "carrierName": "Urbike Logistique",
+                            "service": "URBIKE-AM",
+                            "serviceName": "Urbike tournée matin",
+                            "routeId": "URBIKE-AM-METRO-LYON",
+                            "serviceKind": "LAST_MILE",
+                            "estimatedDeparture": "2026-10-13T07:30:00+02:00",
+                            "estimatedArrival": "2026-10-13T13:00:00+02:00",
+                            "distanceKm": 32.9,
+                            "metrics": {
+                                "carbonKg": 0.005,
+                                "cost": 4.9,
+                                "price": 0
+                            },
+                            "cost": 4.9
+                        }
+                    ],
+                    "hubs": [
+                        "LMH-03"
+                    ],
+                    "estimatedDelivery": {
+                        "from": "2026-10-13T09:00:00+02:00",
+                        "to": "2026-10-13T13:00:00+02:00"
+                    },
+                    "leadTimeHours": 27,
+                    "distanceKm": 44.2,
+                    "metrics": {
+                        "carbonKg": 0.01,
+                        "cost": 6.41,
+                        "price": 0
+                    },
+                    "alternatives": [
+                        {
+                            "stockPointId": "STORE-020",
+                            "name": "Magasin Lyon 1",
+                            "type": "STORE",
+                            "city": "Lyon",
+                            "distanceKm": 34.8,
+                            "estimatedDelivery": {
+                                "from": "2026-10-13T09:00:00+02:00",
+                                "to": "2026-10-13T13:00:00+02:00"
+                            },
+                            "deliveryHours": 27,
+                            "parcels": 1,
+                            "carriers": [
+                                "NAVETTE",
+                                "URBIKE"
+                            ],
+                            "route": [
+                                "LMH-03",
+                                "CUSTOMER"
+                            ],
+                            "metrics": {
+                                "carbonKg": 0.007,
+                                "cost": 5.7,
+                                "price": 0
+                            },
+                            "current": false
+                        },
+                        {
+                            "stockPointId": "STORE-026",
+                            "name": "Magasin Villeurbanne 1",
+                            "type": "STORE",
+                            "city": "Villeurbanne",
+                            "distanceKm": 39,
+                            "estimatedDelivery": {
+                                "from": "2026-10-13T09:00:00+02:00",
+                                "to": "2026-10-13T13:00:00+02:00"
+                            },
+                            "deliveryHours": 27,
+                            "parcels": 1,
+                            "carriers": [
+                                "NAVETTE",
+                                "URBIKE"
+                            ],
+                            "route": [
+                                "LMH-03",
+                                "CUSTOMER"
+                            ],
+                            "metrics": {
+                                "carbonKg": 0.01,
+                                "cost": 5.7,
+                                "price": 0
+                            },
+                            "current": false
+                        },
+                        {
+                            "stockPointId": "STORE-074",
+                            "name": "Magasin Clermont-Ferrand 1",
+                            "type": "STORE",
+                            "city": "Clermont-Ferrand",
+                            "distanceKm": 226.1,
+                            "estimatedDelivery": {
+                                "from": "2026-10-13T09:00:00+02:00",
+                                "to": "2026-10-13T13:00:00+02:00"
+                            },
+                            "deliveryHours": 27,
+                            "parcels": 1,
+                            "carriers": [
+                                "TRANSALP",
+                                "TRANSALP",
+                                "URBIKE"
+                            ],
+                            "route": [
+                                "HUB-RHONE",
+                                "LMH-03",
+                                "CUSTOMER"
+                            ],
+                            "metrics": {
+                                "carbonKg": 0.084,
+                                "cost": 6.2,
+                                "price": 0
+                            },
+                            "current": false
+                        }
+                    ]
+                }
+            ],
+            "allocations": [
+                {
+                    "stockPointId": "WH-02",
+                    "sku": "SKU-00002",
+                    "quantity": 2
+                },
+                {
+                    "stockPointId": "WH-02",
+                    "sku": "SKU-00007",
+                    "quantity": 1
+                }
+            ],
+            "preparationGroups": [
+                {
+                    "id": "PREP-001",
+                    "stockPointId": "WH-02",
+                    "items": [
+                        {
+                            "sku": "SKU-00002",
+                            "quantity": 2
+                        },
+                        {
+                            "sku": "SKU-00007",
+                            "quantity": 1
+                        }
+                    ],
+                    "readyAt": "2026-10-12T12:15:00+02:00",
+                    "parcels": 1
+                }
+            ],
+            "shipments": [
+                {
+                    "id": "SHP-001",
+                    "packageId": "PKG-001",
+                    "kind": "DIRECT",
+                    "origin": "WH-02",
+                    "destination": "CUSTOMER",
+                    "items": [
+                        {
+                            "sku": "SKU-00002",
+                            "quantity": 2
+                        },
+                        {
+                            "sku": "SKU-00007",
+                            "quantity": 1
+                        }
+                    ],
+                    "legs": [
+                        {
+                            "legId": "LEG-0137",
+                            "from": "WH-02",
+                            "to": "LMH-03",
+                            "carrier": "TRANSALP",
+                            "carrierName": "Transalp Messagerie",
+                            "service": "TRANSALP-LH",
+                            "serviceName": "Transalp traction de nuit",
+                            "serviceKind": "LINEHAUL",
+                            "estimatedDeparture": "2026-10-12T21:00:00+02:00",
+                            "estimatedArrival": "2026-10-12T22:00:00+02:00",
+                            "distanceKm": 11.3,
+                            "metrics": {
+                                "carbonKg": 0.005,
+                                "cost": 0.61,
+                                "price": 0
+                            },
+                            "cost": 0.61
+                        },
+                        {
+                            "legId": "RT-URBIKE-AM-LMH-03",
+                            "from": "LMH-03",
+                            "to": "CUSTOMER",
+                            "carrier": "URBIKE",
+                            "carrierName": "Urbike Logistique",
+                            "service": "URBIKE-AM",
+                            "serviceName": "Urbike tournée matin",
+                            "routeId": "URBIKE-AM-METRO-LYON",
+                            "serviceKind": "LAST_MILE",
+                            "estimatedDeparture": "2026-10-13T07:30:00+02:00",
+                            "estimatedArrival": "2026-10-13T13:00:00+02:00",
+                            "distanceKm": 32.9,
+                            "metrics": {
+                                "carbonKg": 0.005,
+                                "cost": 4.9,
+                                "price": 0
+                            },
+                            "cost": 4.9
+                        }
+                    ]
+                }
+            ],
+            "consolidations": [],
+            "timeline": [
+                {
+                    "at": "2026-10-12T10:00:00+02:00",
+                    "type": "ORDER",
+                    "node": "CUSTOMER",
+                    "description": "Order placed"
+                },
+                {
+                    "at": "2026-10-12T12:15:00+02:00",
+                    "type": "PREPARATION_READY",
+                    "node": "WH-02",
+                    "description": "Preparation ready at Entrepôt Saint-Priest"
+                },
+                {
+                    "at": "2026-10-12T21:00:00+02:00",
+                    "type": "DEPARTURE",
+                    "node": "WH-02",
+                    "description": "SHP-001 departs Entrepôt Saint-Priest (Transalp Messagerie)"
+                },
+                {
+                    "at": "2026-10-12T22:00:00+02:00",
+                    "type": "ARRIVAL",
+                    "node": "LMH-03",
+                    "description": "SHP-001 arrives at Hub urbain Lyon"
+                },
+                {
+                    "at": "2026-10-13T07:30:00+02:00",
+                    "type": "DEPARTURE",
+                    "node": "LMH-03",
+                    "description": "SHP-001 departs Hub urbain Lyon (Urbike Logistique)"
+                },
+                {
+                    "at": "2026-10-13T13:00:00+02:00",
+                    "type": "DELIVERY",
+                    "node": "CUSTOMER",
+                    "packageId": "PKG-001",
+                    "description": "Delivery of PKG-001 between 13/10 09:00 and 13/10 13:00"
+                }
+            ],
+            "criteria": {
+                "price": 0,
+                "carbonKg": 0.01,
+                "deliveryHours": 27,
+                "packages": 1,
+                "cost": 6.41,
+                "legs": 2,
+                "sources": 1
+            },
+            "metrics": {
+                "carbonKg": 0.01,
+                "cost": 6.41,
+                "price": 0
+            },
+            "additionalServices": [
+                {
+                    "id": "APPOINTMENT",
+                    "name": "Livraison sur rendez-vous",
+                    "kind": "APPOINTMENT",
+                    "requested": false,
+                    "items": [
+                        {
+                            "sku": "SKU-00002",
+                            "quantity": 2
+                        },
+                        {
+                            "sku": "SKU-00007",
+                            "quantity": 1
+                        }
+                    ],
+                    "extraDays": 0,
+                    "metrics": {
+                        "cost": 2,
+                        "price": 5
+                    }
+                }
+            ],
+            "stockViewId": "ALL",
+            "score": 0.999
+        },
+        {
+            "id": "option-3",
+            "deliveryMode": "EXPRESS",
+            "strategy": "SINGLE_SOURCE",
+            "estimatedDelivery": {
+                "from": "2026-10-12T17:00:00+02:00",
+                "to": "2026-10-12T21:00:00+02:00"
+            },
+            "totalPackages": 1,
+            "packagesBeforeConsolidation": 1,
+            "totalCost": 27.42,
+            "currency": "EUR",
+            "packages": [
+                {
+                    "packageId": "PKG-001",
+                    "items": [
+                        {
+                            "sku": "SKU-00002",
+                            "quantity": 2
+                        },
+                        {
+                            "sku": "SKU-00007",
+                            "quantity": 1
+                        }
+                    ],
+                    "sourceStockPoints": [
+                        "STORE-026"
+                    ],
+                    "weightKg": 4.1,
+                    "volumeL": 20.1,
+                    "route": [
+                        {
+                            "legId": "RT-URBIKE-SFS-STORE-026",
+                            "from": "STORE-026",
+                            "to": "CUSTOMER",
+                            "carrier": "URBIKE",
+                            "carrierName": "Urbike Logistique",
+                            "service": "URBIKE-SFS",
+                            "serviceName": "Urbike livraison depuis magasin",
+                            "routeId": "URBIKE-SFS-METRO-LYON",
+                            "serviceKind": "STORE_DELIVERY",
+                            "estimatedDeparture": "2026-10-12T15:00:00+02:00",
+                            "estimatedArrival": "2026-10-12T21:00:00+02:00",
+                            "distanceKm": 34.3,
+                            "metrics": {
+                                "carbonKg": 1.717,
+                                "cost": 24.92,
+                                "price": 0
+                            },
+                            "cost": 24.92
+                        }
+                    ],
+                    "hubs": [],
+                    "estimatedDelivery": {
+                        "from": "2026-10-12T17:00:00+02:00",
+                        "to": "2026-10-12T21:00:00+02:00"
+                    },
+                    "leadTimeHours": 11,
+                    "distanceKm": 34.3,
+                    "metrics": {
+                        "carbonKg": 1.717,
+                        "cost": 27.42,
+                        "price": 0
+                    },
+                    "alternatives": [
+                        {
+                            "stockPointId": "STORE-026",
+                            "name": "Magasin Villeurbanne 1",
+                            "type": "STORE",
+                            "city": "Villeurbanne",
+                            "distanceKm": 34.3,
+                            "estimatedDelivery": {
+                                "from": "2026-10-12T17:00:00+02:00",
+                                "to": "2026-10-12T21:00:00+02:00"
+                            },
+                            "deliveryHours": 11,
+                            "parcels": 1,
+                            "carriers": [
+                                "URBIKE"
+                            ],
+                            "route": [
+                                "CUSTOMER"
+                            ],
+                            "metrics": {
+                                "carbonKg": 1.717,
+                                "cost": 24.92,
+                                "price": 0
+                            },
+                            "current": true
+                        },
+                        {
+                            "stockPointId": "STORE-020",
+                            "name": "Magasin Lyon 1",
+                            "type": "STORE",
+                            "city": "Lyon",
+                            "distanceKm": 34.8,
+                            "estimatedDelivery": {
+                                "from": "2026-10-13T09:00:00+02:00",
+                                "to": "2026-10-13T13:00:00+02:00"
+                            },
+                            "deliveryHours": 27,
+                            "parcels": 1,
+                            "carriers": [
+                                "NAVETTE",
+                                "URBIKE"
+                            ],
+                            "route": [
+                                "LMH-03",
+                                "CUSTOMER"
+                            ],
+                            "metrics": {
+                                "carbonKg": 0.007,
+                                "cost": 5.7,
+                                "price": 0
+                            },
+                            "current": false
+                        },
+                        {
+                            "stockPointId": "WH-01",
+                            "name": "Entrepôt Gonesse",
+                            "type": "WAREHOUSE",
+                            "city": "Gonesse",
+                            "distanceKm": 537.9,
+                            "estimatedDelivery": {
+                                "from": "2026-10-13T09:00:00+02:00",
+                                "to": "2026-10-13T13:00:00+02:00"
+                            },
+                            "deliveryHours": 27,
+                            "parcels": 1,
+                            "carriers": [
+                                "TRANSALP",
+                                "URBIKE"
+                            ],
+                            "route": [
+                                "LMH-03",
+                                "CUSTOMER"
+                            ],
+                            "metrics": {
+                                "carbonKg": 0.212,
+                                "cost": 5.75,
+                                "price": 0
+                            },
+                            "current": false
+                        }
+                    ]
+                }
+            ],
+            "allocations": [
+                {
+                    "stockPointId": "STORE-026",
+                    "sku": "SKU-00002",
+                    "quantity": 2
+                },
+                {
+                    "stockPointId": "STORE-026",
+                    "sku": "SKU-00007",
+                    "quantity": 1
+                }
+            ],
+            "preparationGroups": [
+                {
+                    "id": "PREP-001",
+                    "stockPointId": "STORE-026",
+                    "items": [
+                        {
+                            "sku": "SKU-00002",
+                            "quantity": 2
+                        },
+                        {
+                            "sku": "SKU-00007",
+                            "quantity": 1
+                        }
+                    ],
+                    "readyAt": "2026-10-12T12:45:00+02:00",
+                    "parcels": 1
+                }
+            ],
+            "shipments": [
+                {
+                    "id": "SHP-001",
+                    "packageId": "PKG-001",
+                    "kind": "DIRECT",
+                    "origin": "STORE-026",
+                    "destination": "CUSTOMER",
+                    "items": [
+                        {
+                            "sku": "SKU-00002",
+                            "quantity": 2
+                        },
+                        {
+                            "sku": "SKU-00007",
+                            "quantity": 1
+                        }
+                    ],
+                    "legs": [
+                        {
+                            "legId": "RT-URBIKE-SFS-STORE-026",
+                            "from": "STORE-026",
+                            "to": "CUSTOMER",
+                            "carrier": "URBIKE",
+                            "carrierName": "Urbike Logistique",
+                            "service": "URBIKE-SFS",
+                            "serviceName": "Urbike livraison depuis magasin",
+                            "routeId": "URBIKE-SFS-METRO-LYON",
+                            "serviceKind": "STORE_DELIVERY",
+                            "estimatedDeparture": "2026-10-12T15:00:00+02:00",
+                            "estimatedArrival": "2026-10-12T21:00:00+02:00",
+                            "distanceKm": 34.3,
+                            "metrics": {
+                                "carbonKg": 1.717,
+                                "cost": 24.92,
+                                "price": 0
+                            },
+                            "cost": 24.92
+                        }
+                    ]
+                }
+            ],
+            "consolidations": [],
+            "timeline": [
+                {
+                    "at": "2026-10-12T10:00:00+02:00",
+                    "type": "ORDER",
+                    "node": "CUSTOMER",
+                    "description": "Order placed"
+                },
+                {
+                    "at": "2026-10-12T12:45:00+02:00",
+                    "type": "PREPARATION_READY",
+                    "node": "STORE-026",
+                    "description": "Preparation ready at Magasin Villeurbanne 1"
+                },
+                {
+                    "at": "2026-10-12T15:00:00+02:00",
+                    "type": "DEPARTURE",
+                    "node": "STORE-026",
+                    "description": "SHP-001 departs Magasin Villeurbanne 1 (Urbike Logistique)"
+                },
+                {
+                    "at": "2026-10-12T21:00:00+02:00",
+                    "type": "DELIVERY",
+                    "node": "CUSTOMER",
+                    "packageId": "PKG-001",
+                    "description": "Delivery of PKG-001 between 12/10 17:00 and 12/10 21:00"
+                }
+            ],
+            "criteria": {
+                "price": 0,
+                "carbonKg": 1.717,
+                "deliveryHours": 11,
+                "packages": 1,
+                "cost": 27.42,
+                "legs": 1,
+                "sources": 1
+            },
+            "metrics": {
+                "carbonKg": 1.717,
+                "cost": 27.42,
+                "price": 0
+            },
+            "additionalServices": [],
+            "stockViewId": "EXPRESS-STOCK",
+            "score": 0.867
+        }
+    ],
+    "unavailable": [],
+    "calculationTimeMs": 18,
+    "stats": {
+        "candidateStockPoints": 144,
+        "allocations": 36,
+        "plansEvaluated": 152,
+        "pathsConsidered": 402,
+        "hubsPruned": 0,
+        "routeCacheHit": false,
+        "stockVersion": 1,
+        "configVersion": 1,
+        "computeMicros": 18001
+    }
+}

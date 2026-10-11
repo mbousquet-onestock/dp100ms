@@ -1,0 +1,8 @@
+{
+  "destination": {"postalCode": "69003", "country": "FR"},
+  "orderDate": "2026-10-12T10:00:00+02:00",
+  "items": [{"sku": "SKU-00002", "quantity": 2}, {"sku": "SKU-00007", "quantity": 1}],
+  "deliveryModes": ["STANDARD", "EXPRESS", "RELAY"],
+  "maxOptions": 3,
+  "alternatives": {"limit": 3, "sortBy": "deliveryHours"}
+}
