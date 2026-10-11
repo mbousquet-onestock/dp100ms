@@ -115,7 +115,7 @@ This is the main way to configure a carrier, as in the OneStock Delivery screens
 
 A **zone** (`/api/v1/zones`) is a named set of places: departments (`"*"` = metropolitan France), postal code prefixes and stock points or hubs. Origins match the stock point or hub (by id or postal code); destinations match the customer department (postal code prefixes of a destination zone are matched at department level).
 
-A **carrier route** (`/api/v1/carrier-routes`) links an origin zone to a destination zone for one carrier service:
+A **carrier route** (`/api/v1/carrier-routes`) links an origin zone to a destination zone for one carrier service. For a service delivering the customer, the routes are the **source of truth**: every stock point of the origin zone can ship with the service to the destination zone. The engine generates one direct leg per (stock point, service), named `RT-<service>-<stock point>`, covering the union of the destination zones of its routes; stored legs to the customer of a routed service are ignored. Platforms (hubs that are not stock points) ship only when the zone lists them. Line-haul and shuttle services keep their explicit legs (multi-leg network and consolidation). A route contains:
 
 - `costs`: an inline cost grid (same format as a rate card: rows with conditions on weight, dimensions, item count, order amount…, outputs `cost` = transport cost, `price` = shipping fees, `carbonKg` = carbon footprint, or custom outputs; surcharges; `noMatch`);
 - `transitMinHours` / `transitMaxHours`: transit time from pickup to delivery in elapsed hours (0/0 keeps the service transit in delivery days);
@@ -150,7 +150,11 @@ How a route is applied to a leg operated with its service:
 
 Timing with a route: the parcel leaves at the first pickup time of a pickup day after it is ready (minus the leg cut-off margin); it is delivered in the first delivery slot of a delivery day that ends after `departure + transitMaxHours`, and not before `departure + transitMinHours`. Example: pickup Monday 18:00, transit 12 h, slots 05:00-22:00 → delivered Tuesday 05:00-22:00.
 
-`POST /api/v1/carriers/{id}/schedule-preview` returns the route applied (`routeId`, `transitMinHours`, `transitMaxHours`) with the departure and the delivery slot; pass `originId` to choose the origin. Routes do not change the coverage of the service.
+`POST /api/v1/carriers/{id}/schedule-preview` returns the route applied (`routeId`, `transitMinHours`, `transitMaxHours`) with the departure and the delivery slot; pass `originId` to choose the origin.
+
+Article restrictions are set per carrier (`restrictions`, every service and route) and per delivery service; a route may add its own.
+
+The reference dataset configures every customer delivery as routes: origin zones of shipping points (all warehouses, the stores shipping with a service, each last-mile hub or platform), national destination zones (France, France without Corsica, express zone without Corsica and mountain areas), Corsica, mountain areas, remote departments, metropolitan areas and regions.
 
 ## 2. Article rules and restrictions
 
@@ -189,7 +193,32 @@ A stock view selects the stock usable by a delivery mode (`stockViewId`) or by o
 
 `GET /api/v1/stock-views/{id}/preview` shows how many points and articles a view selects.
 
-## 5. Delivery mode criteria
+## 5. Delivery modes: stock view, services compared, operations, priorities
+
+A delivery mode defines:
+
+- a **stock view** (`stockViewId`, section 4): the stock points and articles it may use;
+- the **transport services to compare** (`serviceIds`): the engine evaluates the routes of these services from the shipping points of the stock view and keeps the best one for the mode (empty = the services listing the mode in their own `modes`);
+- **operations** (`operations`): timed steps around the transport:
+
+| Kind | Effect |
+|---|---|
+| `PAYMENT` | payment authorisation: delays the start of preparation (elapsed minutes) |
+| `VALIDATION` | order validation, fraud check: delays the start of preparation (elapsed minutes) |
+| `PREPARATION` | replaces the preparation time of the stock points (minutes within opening hours) |
+| `PACKING` | added to the preparation time (minutes within opening hours) |
+| `RECEPTION` | reception after delivery (pick-up point, store): delays the delivery slot (elapsed minutes) |
+
+- **priorities** (`criteria`, `selection`) to find the best route, below.
+
+```json
+{"id": "RELAY", "stockViewId": "WEB-CATALOG", "serviceIds": ["RELAIS-STD"],
+ "operations": [{"kind": "PAYMENT", "name": "Autorisation de paiement", "minutes": 15},
+                {"kind": "RECEPTION", "name": "Réception au point relais", "minutes": 120}],
+ "selection": "LEXICOGRAPHIC", "criteria": [{"metric": "price", "priority": 1}, {"metric": "deliveryHours", "priority": 2}]}
+```
+
+### Priorities
 
 A delivery mode ranks its options and picks each shipment's route with **criteria**: `deliveryHours`, `cost`, `price`, `carbonKg`, `packages`, `legs`, `sources` or any custom output, each with a direction (`MIN` by default), a weight, a priority, an optional hard limit `max` and a tolerance.
 
@@ -200,7 +229,9 @@ For every allocation the engine builds the plan where each shipment takes its fa
 
 Reference dataset: STANDARD (weighted: time, price, cost, parcels, carbon; franco 60 €), EXPRESS (by priority: time then price; stock view keeping one unit in stores; franco 150 €), SAME_DAY (time then cost), RELAY (price then time; web catalog only; franco 40 €) and ECO (carbon first, then parcels and time; franco 50 €).
 
-## 6. Package-level information
+## 6. Best route per mode and package-level information
+
+`bestByMode[]` in the response gives, for every requested mode, the best delivery route: delivery window, lead time, cost, customer price, carbon, parcels, carriers / services / carrier routes delivering the customer, shipping points and alternative shipping points (with `alternatives`). Its `optionId` points to the detailed option.
 
 Each package of an option returns its exact items, source points, weight, volume, delivery window, `leadTimeHours`, `distanceKm`, `metrics` (its share of cost, price, carbon and custom outputs: own legs, plus order-level outputs shared by weight), and its full route with per-leg distance and metrics.
 

@@ -28,11 +28,24 @@ curl -s -X POST $BASE/api/v1/delivery-promises -H 'Content-Type: application/jso
 }'
 ```
 
+The response starts with `bestByMode[]`: for every requested mode that can be served, the **best delivery route** found with its delivery window, lead time, cost, customer price, carbon, parcels, the carriers / services / carrier routes delivering the customer, the shipping points and (with `"alternatives": {"limit": 5}`) the other stock points able to ship. `optionId` points to the detailed option in `options[]`:
+
+```json
+"bestByMode": [{
+  "deliveryMode": "STANDARD", "optionId": "OPT-1", "strategy": "SINGLE_SOURCE",
+  "estimatedDelivery": {"from": "2026-10-14T09:00:00+02:00", "to": "2026-10-14T18:00:00+02:00"},
+  "leadTimeHours": 56, "cost": 8.1, "price": 4.9, "carbonKg": 0.21, "currency": "EUR", "packages": 1,
+  "carriers": [{"carrierId": "COLIVIA", "carrierName": "Colivia", "serviceId": "COLIVIA-STD", "serviceName": "Colivia Domicile",
+                "routeIds": ["COLIVIA-STD-WAREHOUSE-FR"], "packages": 1}],
+  "shippingPoints": ["WH-03"], "alternativeShippingPoints": ["STORE-012", "WH-07"]
+}]
+```
+
 Each option contains:
 
 - `estimatedDelivery {from, to}`: the promised window (end of the last leg);
 - `strategy`: `SINGLE_SOURCE`, `MULTI_SOURCE_DIRECT` or `CONSOLIDATED`;
-- `packages[]`: physical parcels delivered to the customer with their exact items, source stock points, weight, volume, hubs and full route (inbound legs of every contributing source, then the parcel's own legs) with carrier, service, departure, arrival and cost;
+- `packages[]`: physical parcels delivered to the customer with their exact items, source stock points, weight, volume, hubs and full route (inbound legs of every contributing source, then the parcel's own legs) with carrier, service, carrier route (`routeId`), departure, arrival and cost;
 - `totalPackages` and `packagesBeforeConsolidation`;
 - `allocations[]`, `preparationGroups[]`, `shipments[]`, `consolidations[]`, `timeline[]`;
 - `criteria` (delivery hours, parcels, cost, legs, sources) and `score` (0 to 1, relative to the other options of the same mode).
