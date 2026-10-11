@@ -123,3 +123,7 @@ curl -s "$BASE/api/v1/benchmarks/baskets?count=1000&seed=1"   # basket pool used
 ```
 
 `target: "inprocess"` calls the handler directly (routing and JSON included, no network); `target: "http"` sends real HTTP requests to `baseUrl` (default: the server itself). k6 runs are imported into the same history by `bench/run.sh` when `ADMIN_TOKEN` is set.
+
+## Postman
+
+Import `docs/postman/dp100ms.postman_collection.json` and one of the environments (`docs/postman/local.postman_environment.json`, `docs/postman/vercel.postman_environment.json`), then set `baseUrl` and `adminToken`. The collection covers promises (with tests printing the best route per mode in the Postman console), carriers, zones, carrier routes (create, schedule preview, delete), delivery modes, database status and reseed. The full API can also be imported from `{{baseUrl}}/openapi.json`.

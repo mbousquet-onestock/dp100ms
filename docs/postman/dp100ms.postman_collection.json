@@ -1,0 +1,783 @@
+{
+  "info": {
+    "name": "Delivery Promise API (dp100ms)",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "description": "Delivery Promise & Multi-Leg Routing Engine. Set the collection variables baseUrl (e.g. https://<project>.vercel.app/api/v1 or http://localhost:8080/api/v1) and adminToken (ADMIN_TOKEN). Write requests (POST/PUT/DELETE on configuration, reseed) use the admin bearer token; reads and promises are public. Full reference: GET {{baseUrl}}/openapi.json (can be imported in Postman too)."
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:8080/api/v1"
+    },
+    {
+      "key": "adminToken",
+      "value": "dev-admin-token"
+    }
+  ],
+  "item": [
+    {
+      "name": "1. Promesse de livraison",
+      "item": [
+        {
+          "name": "Promesse — 3 modes, Lyon",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/delivery-promises",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "delivery-promises"
+              ]
+            },
+            "description": "Best route per selected mode (bestByMode) with cost, delay, carrier, service, carrier route and shipping points, plus the detailed options.",
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"destination\": {\n    \"postalCode\": \"69003\",\n    \"country\": \"FR\"\n  },\n  \"orderDate\": \"2026-10-12T10:00:00+02:00\",\n  \"items\": [\n    {\n      \"sku\": \"SKU-00002\",\n      \"quantity\": 2\n    },\n    {\n      \"sku\": \"SKU-00007\",\n      \"quantity\": 1\n    }\n  ],\n  \"deliveryModes\": [\n    \"STANDARD\",\n    \"EXPRESS\",\n    \"RELAY\"\n  ],\n  \"maxOptions\": 3,\n  \"alternatives\": {\n    \"limit\": 3,\n    \"sortBy\": \"deliveryHours\"\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200', () => pm.response.to.have.status(200));",
+                  "const r = pm.response.json();",
+                  "pm.test('best route per mode', () => pm.expect(r.bestByMode).to.be.an('array'));",
+                  "pm.test('calculation time header', () => pm.expect(pm.response.headers.get('X-Calculation-Time-Ms')).to.exist);",
+                  "r.bestByMode.forEach(b => console.log(b.deliveryMode, b.carriers.map(c => c.serviceName).join(','), b.estimatedDelivery.to, b.cost + ' €', b.shippingPoints.join(',')));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Promesse — tous les modes, Paris, alternatives triées par coût",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/delivery-promises",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "delivery-promises"
+              ]
+            },
+            "description": "",
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"destination\": {\n    \"postalCode\": \"75011\",\n    \"country\": \"FR\"\n  },\n  \"orderDate\": \"2026-10-16T15:30:00+02:00\",\n  \"items\": [\n    {\n      \"sku\": \"SKU-00004\",\n      \"quantity\": 1\n    },\n    {\n      \"sku\": \"SKU-00011\",\n      \"quantity\": 2\n    }\n  ],\n  \"maxOptions\": 5,\n  \"alternatives\": {\n    \"limit\": 5,\n    \"sortBy\": \"cost\"\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200', () => pm.response.to.have.status(200));",
+                  "const r = pm.response.json();",
+                  "pm.test('best route per mode', () => pm.expect(r.bestByMode).to.be.an('array'));",
+                  "pm.test('calculation time header', () => pm.expect(pm.response.headers.get('X-Calculation-Time-Ms')).to.exist);",
+                  "r.bestByMode.forEach(b => console.log(b.deliveryMode, b.carriers.map(c => c.serviceName).join(','), b.estimatedDelivery.to, b.cost + ' €', b.shippingPoints.join(',')));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Promesse — Corse",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/delivery-promises",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "delivery-promises"
+              ]
+            },
+            "description": "",
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"destination\": {\n    \"postalCode\": \"20000\",\n    \"country\": \"FR\"\n  },\n  \"orderDate\": \"2026-10-12T10:00:00+02:00\",\n  \"items\": [\n    {\n      \"sku\": \"SKU-00002\",\n      \"quantity\": 1\n    }\n  ],\n  \"deliveryModes\": [\n    \"STANDARD\",\n    \"EXPRESS\"\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200', () => pm.response.to.have.status(200));",
+                  "const r = pm.response.json();",
+                  "pm.test('best route per mode', () => pm.expect(r.bestByMode).to.be.an('array'));",
+                  "pm.test('calculation time header', () => pm.expect(pm.response.headers.get('X-Calculation-Time-Ms')).to.exist);",
+                  "r.bestByMode.forEach(b => console.log(b.deliveryMode, b.carriers.map(c => c.serviceName).join(','), b.estimatedDelivery.to, b.cost + ' €', b.shippingPoints.join(',')));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Promesse — priorités imposées (carbone puis délai)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/delivery-promises",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "delivery-promises"
+              ]
+            },
+            "description": "",
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"destination\": {\n    \"postalCode\": \"33000\",\n    \"country\": \"FR\"\n  },\n  \"orderDate\": \"2026-10-12T10:00:00+02:00\",\n  \"items\": [\n    {\n      \"sku\": \"SKU-00002\",\n      \"quantity\": 2\n    }\n  ],\n  \"deliveryModes\": [\n    \"STANDARD\"\n  ],\n  \"selection\": \"LEXICOGRAPHIC\",\n  \"criteria\": [\n    {\n      \"metric\": \"carbonKg\",\n      \"priority\": 1,\n      \"tolerance\": 0.05\n    },\n    {\n      \"metric\": \"deliveryHours\",\n      \"priority\": 2\n    }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200', () => pm.response.to.have.status(200));",
+                  "const r = pm.response.json();",
+                  "pm.test('best route per mode', () => pm.expect(r.bestByMode).to.be.an('array'));",
+                  "pm.test('calculation time header', () => pm.expect(pm.response.headers.get('X-Calculation-Time-Ms')).to.exist);",
+                  "r.bestByMode.forEach(b => console.log(b.deliveryMode, b.carriers.map(c => c.serviceName).join(','), b.estimatedDelivery.to, b.cost + ' €', b.shippingPoints.join(',')));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Promesse — service associé demandé (rendez-vous)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/delivery-promises",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "delivery-promises"
+              ]
+            },
+            "description": "With additionalServices, only the carriers offering the service remain: modes whose services cannot provide it are listed in unavailable (NO_FEASIBLE_PLAN).",
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"destination\": {\n    \"postalCode\": \"75011\",\n    \"country\": \"FR\"\n  },\n  \"orderDate\": \"2026-10-16T15:30:00+02:00\",\n  \"items\": [\n    {\n      \"sku\": \"SKU-00004\",\n      \"quantity\": 1\n    },\n    {\n      \"sku\": \"SKU-00011\",\n      \"quantity\": 2\n    }\n  ],\n  \"maxOptions\": 5,\n  \"alternatives\": {\n    \"limit\": 5,\n    \"sortBy\": \"cost\"\n  },\n  \"additionalServices\": [\n    \"APPOINTMENT\"\n  ],\n  \"deliveryModes\": [\n    \"STANDARD\"\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200', () => pm.response.to.have.status(200));",
+                  "const r = pm.response.json();",
+                  "pm.test('best route per mode', () => pm.expect(r.bestByMode).to.be.an('array'));",
+                  "pm.test('calculation time header', () => pm.expect(pm.response.headers.get('X-Calculation-Time-Ms')).to.exist);",
+                  "r.bestByMode.forEach(b => console.log(b.deliveryMode, b.carriers.map(c => c.serviceName).join(','), b.estimatedDelivery.to, b.cost + ' €', b.shippingPoints.join(',')));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "2. Transporteurs, zones et routes",
+      "item": [
+        {
+          "name": "Lister les transporteurs",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/carriers",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "carriers"
+              ]
+            },
+            "description": "",
+            "auth": {
+              "type": "noauth"
+            }
+          }
+        },
+        {
+          "name": "Lister les services",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/services?carrierId=COLIVIA",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "services"
+              ],
+              "query": [
+                {
+                  "key": "carrierId",
+                  "value": "COLIVIA"
+                }
+              ]
+            },
+            "description": "",
+            "auth": {
+              "type": "noauth"
+            }
+          }
+        },
+        {
+          "name": "Lister les zones",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/zones?pageSize=100",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "zones"
+              ],
+              "query": [
+                {
+                  "key": "pageSize",
+                  "value": "100"
+                }
+              ]
+            },
+            "description": "",
+            "auth": {
+              "type": "noauth"
+            }
+          }
+        },
+        {
+          "name": "Créer une zone",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/zones",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "zones"
+              ]
+            },
+            "description": "",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{adminToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"id\": \"BRETAGNE\",\n  \"name\": \"Bretagne\",\n  \"departments\": [\n    \"22\",\n    \"29\",\n    \"35\",\n    \"56\"\n  ],\n  \"active\": true\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Lister les routes d'un transporteur",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/carrier-routes?carrierId=COLIVIA",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "carrier-routes"
+              ],
+              "query": [
+                {
+                  "key": "carrierId",
+                  "value": "COLIVIA"
+                }
+              ]
+            },
+            "description": "",
+            "auth": {
+              "type": "noauth"
+            }
+          }
+        },
+        {
+          "name": "Lire une route",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/carrier-routes/COLIVIA-STD-WAREHOUSE-FR",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "carrier-routes",
+                "COLIVIA-STD-WAREHOUSE-FR"
+              ]
+            },
+            "description": "",
+            "auth": {
+              "type": "noauth"
+            }
+          }
+        },
+        {
+          "name": "Créer une route transporteur",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/carrier-routes",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "carrier-routes"
+              ]
+            },
+            "description": "",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{adminToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"id\": \"COLIVIA-STD-WH-BRETAGNE\",\n  \"name\": \"Colivia Domicile — Bretagne\",\n  \"carrierId\": \"COLIVIA\",\n  \"serviceId\": \"COLIVIA-STD\",\n  \"originZoneId\": \"ALL-WAREHOUSE\",\n  \"destinationZoneId\": \"BRETAGNE\",\n  \"priority\": 1,\n  \"active\": true,\n  \"transitMinHours\": 24,\n  \"transitMaxHours\": 36,\n  \"costs\": {\n    \"scope\": \"PARCEL\",\n    \"currency\": \"EUR\",\n    \"volumetricDivisor\": 5000,\n    \"noMatch\": \"REJECT\",\n    \"rows\": [\n      {\n        \"label\": \"≤ 1 kg\",\n        \"conditions\": {\n          \"chargeableWeightKg\": {\n            \"max\": 1\n          }\n        },\n        \"outputs\": {\n          \"cost\": {\n            \"fixed\": 4.9\n          },\n          \"price\": {\n            \"fixed\": 4.9\n          },\n          \"carbonKg\": {\n            \"fixed\": 0.12\n          }\n        }\n      },\n      {\n        \"label\": \"1 – 10 kg\",\n        \"conditions\": {\n          \"chargeableWeightKg\": {\n            \"min\": 1,\n            \"max\": 10\n          }\n        },\n        \"outputs\": {\n          \"cost\": {\n            \"fixed\": 7.5\n          },\n          \"price\": {\n            \"fixed\": 6.9\n          },\n          \"carbonKg\": {\n            \"fixed\": 0.18\n          }\n        }\n      },\n      {\n        \"label\": \"10 – 30 kg\",\n        \"conditions\": {\n          \"chargeableWeightKg\": {\n            \"min\": 10,\n            \"max\": 30\n          }\n        },\n        \"outputs\": {\n          \"cost\": {\n            \"fixed\": 12\n          },\n          \"price\": {\n            \"fixed\": 9.9\n          },\n          \"carbonKg\": {\n            \"fixed\": 0.3\n          }\n        }\n      }\n    ]\n  },\n  \"planning\": {\n    \"timezone\": \"Europe/Paris\",\n    \"honorHolidays\": true,\n    \"days\": [\n      {\n        \"weekday\": 1,\n        \"pickups\": [\n          \"12:00\",\n          \"19:00\"\n        ],\n        \"deliveryStart\": \"08:00\",\n        \"deliveryEnd\": \"18:00\"\n      },\n      {\n        \"weekday\": 2,\n        \"pickups\": [\n          \"12:00\",\n          \"19:00\"\n        ],\n        \"deliveryStart\": \"08:00\",\n        \"deliveryEnd\": \"18:00\"\n      },\n      {\n        \"weekday\": 3,\n        \"pickups\": [\n          \"12:00\",\n          \"19:00\"\n        ],\n        \"deliveryStart\": \"08:00\",\n        \"deliveryEnd\": \"18:00\"\n      },\n      {\n        \"weekday\": 4,\n        \"pickups\": [\n          \"12:00\",\n          \"19:00\"\n        ],\n        \"deliveryStart\": \"08:00\",\n        \"deliveryEnd\": \"18:00\"\n      },\n      {\n        \"weekday\": 5,\n        \"pickups\": [\n          \"12:00\",\n          \"19:00\"\n        ],\n        \"deliveryStart\": \"08:00\",\n        \"deliveryEnd\": \"18:00\"\n      },\n      {\n        \"weekday\": 6,\n        \"deliveryStart\": \"09:00\",\n        \"deliveryEnd\": \"12:00\"\n      }\n    ]\n  },\n  \"metadata\": {\n    \"codeProduit\": \"DOM-BZH\"\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Tester le planning d'une route",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/carriers/COLIVIA/schedule-preview",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "carriers",
+                "COLIVIA",
+                "schedule-preview"
+              ]
+            },
+            "description": "",
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"serviceId\": \"COLIVIA-STD\",\n  \"postalCode\": \"29200\",\n  \"readyAt\": \"2026-10-12T15:00:00+02:00\",\n  \"originId\": \"WH-01\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Supprimer la route de test",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/carrier-routes/COLIVIA-STD-WH-BRETAGNE",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "carrier-routes",
+                "COLIVIA-STD-WH-BRETAGNE"
+              ]
+            },
+            "description": "",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{adminToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Restrictions d'un transporteur (lecture)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/carriers/EXPRESSO",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "carriers",
+                "EXPRESSO"
+              ]
+            },
+            "description": "",
+            "auth": {
+              "type": "noauth"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "3. Modes de livraison",
+      "item": [
+        {
+          "name": "Lister les modes",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/delivery-modes",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "delivery-modes"
+              ]
+            },
+            "description": "",
+            "auth": {
+              "type": "noauth"
+            }
+          }
+        },
+        {
+          "name": "Lire le mode RELAY",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/delivery-modes/RELAY",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "delivery-modes",
+                "RELAY"
+              ]
+            },
+            "description": "",
+            "auth": {
+              "type": "noauth"
+            }
+          }
+        },
+        {
+          "name": "Modifier un mode (services comparés, opérations, priorités)",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/delivery-modes/RELAY",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "delivery-modes",
+                "RELAY"
+              ]
+            },
+            "description": "PUT replaces the whole mode: read it first and keep every field.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{adminToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"id\": \"RELAY\",\n  \"name\": \"Point relais\",\n  \"description\": \"Retrait en point relais en 2 à 4 jours\",\n  \"maxLegs\": 3,\n  \"maxSources\": 3,\n  \"allowConsolidation\": true,\n  \"allowSplit\": true,\n  \"maxDeliveryDays\": 7,\n  \"price\": 2.9,\n  \"active\": true,\n  \"stockViewId\": \"WEB-CATALOG\",\n  \"priceRateCardIds\": [\n    \"PRICE-RELAY\"\n  ],\n  \"serviceIds\": [\n    \"RELAIS-STD\"\n  ],\n  \"operations\": [\n    {\n      \"kind\": \"PAYMENT\",\n      \"name\": \"Autorisation de paiement\",\n      \"minutes\": 15\n    },\n    {\n      \"kind\": \"RECEPTION\",\n      \"name\": \"Réception au point relais\",\n      \"minutes\": 120\n    }\n  ],\n  \"selection\": \"LEXICOGRAPHIC\",\n  \"criteria\": [\n    {\n      \"metric\": \"price\",\n      \"weight\": 0.6,\n      \"priority\": 1,\n      \"tolerance\": 0.5\n    },\n    {\n      \"metric\": \"deliveryHours\",\n      \"weight\": 0.4,\n      \"priority\": 2\n    }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Lister les vues de stock",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/stock-views",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "stock-views"
+              ]
+            },
+            "description": "",
+            "auth": {
+              "type": "noauth"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "4. Administration",
+      "item": [
+        {
+          "name": "Santé",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/health",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "health"
+              ]
+            },
+            "description": "",
+            "auth": {
+              "type": "noauth"
+            }
+          }
+        },
+        {
+          "name": "État de la base",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/admin/database",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "admin",
+                "database"
+              ]
+            },
+            "description": "",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{adminToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Recharger le jeu de démonstration (remplace la base)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/admin/reseed",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "admin",
+                "reseed"
+              ]
+            },
+            "description": "Regenerates the reference dataset and REPLACES the database content. seed 42 = reference dataset (omitted = 0, another dataset). stockStorage: delta (recommended) or full.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{adminToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"seed\": 42,\n  \"stockStorage\": \"delta\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Document OpenAPI",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/openapi.json",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "openapi.json"
+              ]
+            },
+            "description": "",
+            "auth": {
+              "type": "noauth"
+            }
+          }
+        }
+      ]
+    }
+  ]
+}
