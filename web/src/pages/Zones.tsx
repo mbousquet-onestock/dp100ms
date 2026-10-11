@@ -6,14 +6,16 @@ import type { Zone } from '../api/types';
 import { IconMap, IconPlus } from '../components/Icons';
 import { Badge, Card, Checkbox, ConfirmButton, cx, Drawer, EmptyState, ErrorAlert, Field, ListInput, Loading, PageHeader, SearchInput, Spinner, Switch, useToast } from '../components/ui';
 import { errorsStarting, FieldErrors } from '../components/carrier/shared';
-import { zoneSummary } from '../lib/routes';
+import { plural, zoneShippingSites, zoneSummary } from '../lib/routes';
 
-const empty = (): Zone => ({ id: '', name: '', description: '', departments: [], postalCodes: [], stockPointIds: [], active: true });
+const empty = (): Zone => ({ id: '', name: '', description: '', departments: [], excludedDepartments: [], postalCodes: [], stockPointIds: [], active: true });
 
 export default function Zones() {
   const zones = useZones();
   const routes = useCarrierRoutes();
   const carriers = useCarriers();
+  const points = useAllStockPoints();
+  const hubs = useHubs();
   const crud = useZonesCrud();
   const toast = useToast();
   const [q, setQ] = useState('');
@@ -82,6 +84,9 @@ export default function Zones() {
                       </td>
                       <td className="min-w-[220px] text-xs">
                         <div>{zoneSummary(z)}</div>
+                        {(z.departments?.length || z.postalCodes?.length) && points.data && hubs.data ? (
+                          <div className="text-neutral-500">{plural(zoneShippingSites(z, points.data.items, hubs.data.items).length, "site d'expédition actif", "sites d'expédition actifs")}</div>
+                        ) : null}
                         {z.description && <div className="text-neutral-500">{z.description}</div>}
                       </td>
                       <td className="min-w-[180px] text-xs">
@@ -145,7 +150,7 @@ function ZoneDrawer({
   const save = () => {
     const opt = <T,>(a: T[] | undefined) => (a && a.length ? a : undefined);
     m.mutate(
-      { ...v, description: v.description || undefined, departments: opt(v.departments), postalCodes: opt(v.postalCodes), stockPointIds: opt(v.stockPointIds) },
+      { ...v, description: v.description || undefined, departments: opt(v.departments), excludedDepartments: opt(v.excludedDepartments), postalCodes: opt(v.postalCodes), stockPointIds: opt(v.stockPointIds) },
       {
         onSuccess: () => {
           toast('Zone enregistrée');
@@ -196,6 +201,14 @@ function ZoneDrawer({
             </Field>
           )}
           {all && <FieldErrors messages={errorsStarting(fe, 'departments')} />}
+          <Field
+            label="Départements exclus"
+            className="mt-m"
+            hint={all ? 'Retirés de la France métropolitaine, ex. 20 pour exclure la Corse' : 'Retirés de la zone même si un préfixe de code postal correspond'}
+            error={errorsStarting(fe, 'excludedDepartments')[0]}
+          >
+            <ListInput value={v.excludedDepartments} onChange={(x) => set('excludedDepartments', x)} placeholder="20" invalid={errorsStarting(fe, 'excludedDepartments').length > 0} id="zone-excluded-departments" />
+          </Field>
         </div>
         <Field label="Préfixes de codes postaux" hint="2 à 5 caractères, ex. 750, 69001. Pour une destination, ils sont rapprochés au niveau du département." error={errorsStarting(fe, 'postalCodes')[0]}>
           <ListInput value={v.postalCodes} onChange={(x) => set('postalCodes', x)} placeholder="750, 69001" invalid={errorsStarting(fe, 'postalCodes').length > 0} />

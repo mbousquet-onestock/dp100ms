@@ -1,15 +1,16 @@
-import { useEffect, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { Link } from 'react-router-dom';
 import { ApiError, errorMessage } from '../api/client';
-import { qk, useCarriers, useCrud, useHubs, useModes, useRateCards, useServices, useStockViews } from '../api/hooks';
+import { qk, useCarrierRoutes, useCarriers, useCrud, useModes, useRateCards, useServices, useStockViews } from '../api/hooks';
 import { emptyCard, RateCardDrawer } from '../components/pricing/RateCardEditor';
 import { cleanCriteria, CriteriaEditor } from '../components/pricing/CriteriaEditor';
-import type { DeliveryMode, RateCard, Selection } from '../api/types';
-import { IconCheck, IconChevronDown, IconChevronUp, IconEdit, IconPlus, IconTruck } from '../components/Icons';
+import { MODE_OPERATION_KINDS, type CarrierService, type DeliveryMode, type ModeOperation, type ModeOperationKind, type RateCard, type Selection } from '../api/types';
+import { IconCheck, IconChevronDown, IconChevronUp, IconEdit, IconPlus, IconTrash, IconTruck } from '../components/Icons';
 import { Badge, Checkbox, ConfirmButton, cx, Drawer, EmptyState, ErrorAlert, Field, Loading, NumberInput, PageHeader, SearchInput, Spinner, Switch, useToast } from '../components/ui';
 import { fmtMoney } from '../lib/format';
-import { metricLabel, modeBadge, SELECTION_LABEL } from '../lib/labels';
+import { criterionLabel, fmtMinutes, modeBadge, OPERATION_DEFAULT_NAME, OPERATION_KIND_HINT, OPERATION_KIND_LABEL, SELECTION_LABEL, SERVICE_KIND_LABEL } from '../lib/labels';
 
-const empty = (): DeliveryMode => ({ id: '', name: '', description: '', maxLegs: 3, maxSources: 2, allowConsolidation: true, allowSplit: true, maxDeliveryDays: 5, price: 4.9, criteria: [{ metric: 'deliveryHours', weight: 0.6, priority: 1 }, { metric: 'cost', weight: 0.4, priority: 2 }], selection: 'WEIGHTED', stockViewId: '', priceRateCardIds: [], active: true });
+const empty = (): DeliveryMode => ({ id: '', name: '', description: '', maxLegs: 3, maxSources: 2, allowConsolidation: true, allowSplit: true, maxDeliveryDays: 5, price: 4.9, criteria: [{ metric: 'deliveryHours', weight: 0.6, priority: 1 }, { metric: 'cost', weight: 0.4, priority: 2 }], selection: 'WEIGHTED', stockViewId: '', priceRateCardIds: [], serviceIds: [], operations: [], active: true });
 
 export default function DeliveryModes() {
   const modes = useModes();
@@ -22,7 +23,7 @@ export default function DeliveryModes() {
     <div className="mx-auto max-w-[1000px]">
       <PageHeader
         title="Configuration de la livraison"
-        subtitle="Modes de livraison : vue de stock, transporteurs, opérations et priorités"
+        subtitle="Modes de livraison : vue de stock, services de transport comparés, opérations et priorités"
         actions={
           <button className="btn btn-primary" onClick={() => setEdit({ v: empty(), isNew: true })}>
             <IconPlus /> Créer un mode
@@ -73,19 +74,28 @@ function Step({ done, title, children, onClick }: { done: boolean; title: string
   );
 }
 
+/** Services compared by a mode: its serviceIds, or the active services listing the mode in their own modes. */
+function comparedServices(m: DeliveryMode, services: CarrierService[]): { list: CarrierService[]; explicit: boolean } {
+  if (m.serviceIds?.length) return { list: m.serviceIds.map((id) => services.find((s) => s.id === id)).filter((s): s is CarrierService => !!s), explicit: true };
+  return { list: services.filter((s) => s.active && deliversCustomer(s) && (s.modes ?? []).includes(m.id)), explicit: false };
+}
+
+const deliversCustomer = (s: CarrierService) => s.kind !== 'LINEHAUL' && s.kind !== 'SHUTTLE';
+
+const operationName = (o: ModeOperation) => o.name || OPERATION_DEFAULT_NAME[o.kind] || o.kind;
+
 function ModeCard({ mode: m, onEdit, onDelete }: { mode: DeliveryMode; onEdit: () => void; onDelete: () => void }) {
   const [open, setOpen] = useState(true);
   const views = useStockViews();
   const services = useServices();
   const carriers = useCarriers();
-  const hubs = useHubs();
   const cards = useRateCards({ scope: 'ORDER' });
   const view = views.data?.items.find((x) => x.id === m.stockViewId);
-  const svc = (services.data?.items ?? []).filter((s) => s.active && (s.modes ?? []).includes(m.id));
+  const { list: svc, explicit } = comparedServices(m, services.data?.items ?? []);
   const carrierName = (id: string) => (carriers.data?.items.find((c) => c.id === id)?.name ?? id).toLowerCase();
-  const consolidation = m.allowConsolidation ? (hubs.data?.items ?? []).filter((h) => h.active && h.consolidationEnabled) : [];
+  const ops = m.operations ?? [];
   const criteria = [...(m.criteria ?? [])].sort((a, b) => a.priority - b.priority);
-  const steps = [!!m.stockViewId, svc.length > 0, consolidation.length > 0, criteria.length > 0];
+  const steps = [!!m.stockViewId, svc.length > 0, ops.length > 0, criteria.length > 0];
   const done = steps.filter(Boolean).length;
   const priceCards = (m.priceRateCardIds ?? []).map((id) => cards.data?.items.find((c) => c.id === id)?.name ?? id);
   return (
@@ -125,17 +135,18 @@ function ModeCard({ mode: m, onEdit, onDelete }: { mode: DeliveryMode; onEdit: (
       </div>
       {open && (
         <div className="mt-l flex flex-col gap-m">
-          <Step done={steps[0]} title="Requêtes de stock" onClick={onEdit}>
-            {view ? view.name : 'Tous les stocks (aucune vue de stock)'}
+          <Step done={steps[0]} title="Vue de stock" onClick={onEdit}>
+            {view ? view.name : m.stockViewId ? m.stockViewId : 'Tous les stocks (aucune vue de stock)'}
           </Step>
-          <Step done={steps[1]} title="Transporteurs" onClick={onEdit}>
+          <Step done={steps[1]} title="Services de transport comparés" onClick={onEdit}>
             {svc.length ? svc.map((s) => `${carrierName(s.carrierId)} - ${s.name}`).join(' | ') : 'Aucun service de transport pour ce mode'}
+            {svc.length > 0 && !explicit ? ' (services déclarant ce mode)' : ''}
           </Step>
           <Step done={steps[2]} title="Opérations" onClick={onEdit}>
-            {consolidation.length ? `Consolidation : ${consolidation.map((h) => h.name).join(' | ')}` : m.allowConsolidation ? 'Aucun hub de consolidation actif' : 'Aucune opération'}
+            {ops.length ? ops.map((o) => `${operationName(o)} ${fmtMinutes(o.minutes)}`).join(' | ') : 'Aucune opération'}
           </Step>
           <Step done={steps[3]} title="Priorités" onClick={onEdit}>
-            {criteria.length ? criteria.map((c) => metricLabel(c.metric)).join(' | ') : 'Pondération du moteur'}
+            {criteria.length ? criteria.map(criterionLabel).join(' | ') : 'Pondération du moteur'}
             {criteria.length && m.selection ? ` (${SELECTION_LABEL[m.selection] ?? m.selection})` : ''}
           </Step>
         </div>
@@ -146,12 +157,14 @@ function ModeCard({ mode: m, onEdit, onDelete }: { mode: DeliveryMode; onEdit: (
 
 function ModeDrawer({ state, onClose, crud }: { state: { v: DeliveryMode; isNew: boolean } | null; onClose: () => void; crud: ReturnType<typeof useCrud<DeliveryMode>> }) {
   const [v, setV] = useState<DeliveryMode>(empty());
+  const [sent, setSent] = useState<DeliveryMode | null>(null);
   const toast = useToast();
   const views = useStockViews();
   const m = state?.isNew ? crud.create : crud.update;
   useEffect(() => {
     if (state) {
-      setV({ ...state.v, criteria: state.v.criteria ?? [], selection: state.v.selection || 'WEIGHTED' });
+      setV({ ...state.v, criteria: state.v.criteria ?? [], selection: state.v.selection || 'WEIGHTED', serviceIds: state.v.serviceIds ?? [], operations: state.v.operations ?? [] });
+      setSent(null);
       crud.create.reset();
       crud.update.reset();
     }
@@ -159,6 +172,16 @@ function ModeDrawer({ state, onClose, crud }: { state: { v: DeliveryMode; isNew:
   }, [state]);
   const fe = m.error instanceof ApiError ? m.error.byField : {};
   const set = <K extends keyof DeliveryMode>(k: K, val: DeliveryMode[K]) => setV((x) => ({ ...x, [k]: val }));
+  // 422 serviceIds[i] refer to the list actually sent
+  const serviceErrors: Record<string, string> = {};
+  const otherServiceErrors: string[] = [];
+  for (const [k, msg] of Object.entries(fe)) {
+    const mm = /^serviceIds\[(\d+)\]$/.exec(k);
+    if (!mm) continue;
+    const id = sent?.serviceIds?.[Number(mm[1])];
+    if (id) serviceErrors[id] = msg;
+    else otherServiceErrors.push(msg);
+  }
   return (
     <Drawer
       open={!!state}
@@ -174,18 +197,24 @@ function ModeDrawer({ state, onClose, crud }: { state: { v: DeliveryMode; isNew:
             className="btn btn-primary"
             disabled={m.isPending}
             data-testid="save-mode"
-            onClick={() =>
-              m.mutate(
-                {
-                  ...v,
-                  criteria: v.criteria?.length ? cleanCriteria(v.criteria) : undefined,
-                  selection: v.criteria?.length ? v.selection || 'WEIGHTED' : undefined,
-                  stockViewId: v.stockViewId || undefined,
-                  priceRateCardIds: v.priceRateCardIds?.length ? v.priceRateCardIds : undefined,
+            onClick={() => {
+              const payload: DeliveryMode = {
+                ...v,
+                criteria: v.criteria?.length ? cleanCriteria(v.criteria) : undefined,
+                selection: v.criteria?.length ? v.selection || 'WEIGHTED' : undefined,
+                stockViewId: v.stockViewId || undefined,
+                priceRateCardIds: v.priceRateCardIds?.length ? v.priceRateCardIds : undefined,
+                serviceIds: v.serviceIds?.length ? v.serviceIds : undefined,
+                operations: v.operations?.length ? v.operations.map((o) => ({ kind: o.kind, name: o.name?.trim() || undefined, minutes: o.minutes })) : undefined,
+              };
+              setSent(payload);
+              m.mutate(payload, {
+                onSuccess: () => {
+                  toast('Enregistré');
+                  onClose();
                 },
-                { onSuccess: () => { toast('Enregistré'); onClose(); } },
-              )
-            }
+              });
+            }}
           >
             {m.isPending && <Spinner size={16} className="text-white" />}
             Enregistrer
@@ -228,9 +257,11 @@ function ModeDrawer({ state, onClose, crud }: { state: { v: DeliveryMode; isNew:
             </select>
           </Field>
         </div>
+        <ServicesPicker modeId={v.id} value={v.serviceIds ?? []} onChange={(x) => set('serviceIds', x)} errors={serviceErrors} otherErrors={otherServiceErrors} />
+        <OperationsEditor value={v.operations ?? []} onChange={(x) => set('operations', x)} errors={fe} />
         <PriceCards value={v.priceRateCardIds ?? []} onChange={(x) => set('priceRateCardIds', x)} errors={Object.entries(fe).filter(([k]) => k.startsWith('priceRateCardIds')).map(([, msg]) => msg)} />
         <div>
-          <div className="os-title-s mb-s">Critères de sélection</div>
+          <div className="os-title-s mb-s">Priorités</div>
           <p className="m-0 mb-m text-xs text-neutral-500">Classent les options proposées au client et choisissent le chemin de chaque expédition.</p>
           <CriteriaEditor criteria={v.criteria ?? []} selection={(v.selection || 'WEIGHTED') as Selection} onChange={(c, sel) => setV((x) => ({ ...x, criteria: c, selection: sel }))} errors={fe} />
         </div>
@@ -298,6 +329,182 @@ function PriceCards({ value, onChange, errors }: { value: string[]; onChange: (v
         onSaved={(c) => edit?.isNew && !value.includes(c.id) && onChange([...value, c.id])}
         onDeleted={(id) => onChange(value.filter((x) => x !== id))}
       />
+    </div>
+  );
+}
+
+/** Transport services compared by the mode, grouped by carrier. */
+function ServicesPicker({ modeId, value, onChange, errors, otherErrors }: { modeId: string; value: string[]; onChange: (v: string[]) => void; errors: Record<string, string>; otherErrors: string[] }) {
+  const services = useServices();
+  const carriers = useCarriers();
+  const routes = useCarrierRoutes();
+  const all = (services.data?.items ?? []).filter(deliversCustomer);
+  const defaults = all.filter((s) => s.active && (s.modes ?? []).includes(modeId)).map((s) => s.id);
+  const explicit = value.length > 0;
+  const checked = explicit ? value : defaults;
+  const routeCount = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const r of routes.data?.items ?? []) m.set(r.serviceId, (m.get(r.serviceId) ?? 0) + 1);
+    return m;
+  }, [routes.data]);
+  const groups = (carriers.data?.items ?? []).map((c) => ({ carrier: c, list: all.filter((s) => s.carrierId === c.id) })).filter((g) => g.list.length);
+  const orphans = all.filter((s) => !carriers.data?.items.some((c) => c.id === s.carrierId));
+  if (orphans.length) groups.push({ carrier: { id: '', name: 'Autres', active: true }, list: orphans });
+  const toggle = (id: string, b: boolean) => onChange(b ? [...checked.filter((x) => x !== id), id] : checked.filter((x) => x !== id));
+  return (
+    <div data-testid="mode-services">
+      <div className="mb-s flex flex-wrap items-center justify-between gap-m">
+        <div className="os-title-s">Services de transport comparés</div>
+        {explicit && (
+          <button className="btn btn-tertiary btn-sm" onClick={() => onChange([])} data-testid="services-default">
+            Revenir aux services déclarant ce mode
+          </button>
+        )}
+      </div>
+      <p className="m-0 mb-m text-xs text-neutral-500">
+        Le moteur compare les routes de ces services et garde la meilleure selon les priorités. Chaque route d'un service (zone d'origine → zone de destination) définit les points d'expédition, le délai, la grille de coûts et le planning.{' '}
+        {explicit ? 'Liste choisie pour ce mode.' : 'Aucune liste choisie : les services déclarant ce mode dans leurs modes sont comparés (cochés ci-dessous).'}
+      </p>
+      {services.isLoading || carriers.isLoading ? (
+        <Loading />
+      ) : groups.length === 0 ? (
+        <div className="text-xs text-neutral-500">Aucun service de livraison client.</div>
+      ) : (
+        <div className="flex flex-col gap-m">
+          {groups.map(({ carrier, list }) => (
+            <div key={carrier.id || 'other'} className="rounded-m border border-border" data-testid="mode-services-carrier">
+              <div className="flex flex-wrap items-center justify-between gap-m border-b border-border bg-neutral-20 px-l py-s">
+                <span className="text-s font-medium text-neutral-800">{carrier.name}</span>
+                {carrier.id && (
+                  <Link className="text-xs text-primary hover:underline" to={`/carriers/${encodeURIComponent(carrier.id)}?tab=routes`}>
+                    Voir le transporteur
+                  </Link>
+                )}
+              </div>
+              <div className="flex flex-col">
+                {list.map((s) => {
+                  const n = routeCount.get(s.id) ?? 0;
+                  return (
+                    <div key={s.id} className="border-b border-border px-l py-s last:border-b-0">
+                      <div className="flex flex-wrap items-center gap-m">
+                        <Checkbox checked={checked.includes(s.id)} onChange={(b) => toggle(s.id, b)} label={<span className="font-medium">{s.name}</span>} />
+                        <span className="text-xs text-neutral-500">
+                          {s.id} · {SERVICE_KIND_LABEL[s.kind] ?? s.kind}
+                        </span>
+                        {!s.active && <Badge color="grey">Inactif</Badge>}
+                        <span className="ml-auto">
+                          {carrier.id ? (
+                            <Link className={cx('text-xs hover:underline', n ? 'text-primary' : 'text-neutral-500')} to={`/carriers/${encodeURIComponent(carrier.id)}?tab=routes`} data-testid="service-routes">
+                              {n} route{n > 1 ? 's' : ''}
+                            </Link>
+                          ) : (
+                            <span className="text-xs text-neutral-500">{n} route{n > 1 ? 's' : ''}</span>
+                          )}
+                        </span>
+                      </div>
+                      {errors[s.id] && <div className="field-error">{errors[s.id]}</div>}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+      {value.filter((id) => !all.some((s) => s.id === id)).map((id) => (
+        <div key={id} className="field-error">
+          {errors[id] ?? `Service introuvable ou ne livrant pas le client : ${id}`}{' '}
+          <button className="underline" onClick={() => onChange(value.filter((x) => x !== id))}>
+            retirer
+          </button>
+        </div>
+      ))}
+      {otherErrors.map((msg) => (
+        <div key={msg} className="field-error">
+          {msg}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/** Timed operations of the mode (payment, validation, preparation, packing, reception). */
+function OperationsEditor({ value, onChange, errors }: { value: ModeOperation[]; onChange: (v: ModeOperation[]) => void; errors: Record<string, string> }) {
+  const setRow = (i: number, o: ModeOperation) => onChange(value.map((x, j) => (j === i ? o : x)));
+  const move = (i: number, d: number) => {
+    const j = i + d;
+    if (j < 0 || j >= value.length) return;
+    const next = [...value];
+    [next[i], next[j]] = [next[j], next[i]];
+    onChange(next);
+  };
+  const used = new Set(value.map((o) => o.kind));
+  const nextKind = MODE_OPERATION_KINDS.find((k) => !used.has(k)) ?? 'PAYMENT';
+  return (
+    <div data-testid="mode-operations">
+      <div className="mb-s flex flex-wrap items-center justify-between gap-m">
+        <div className="os-title-s">Opérations</div>
+        <button className="btn btn-secondary btn-sm" onClick={() => onChange([...value, { kind: nextKind, minutes: nextKind === 'PAYMENT' ? 15 : 30 }])} data-testid="add-operation">
+          <IconPlus /> Ajouter une opération
+        </button>
+      </div>
+      <p className="m-0 mb-m text-xs text-neutral-500">Temps ajoutés autour du transport pour calculer la date de livraison promise.</p>
+      <ul className="m-0 mb-m grid list-none gap-xs p-0 text-xs text-neutral-500 sm:grid-cols-2">
+        {MODE_OPERATION_KINDS.map((k) => (
+          <li key={k}>
+            <span className="font-medium text-neutral-700">{OPERATION_KIND_LABEL[k]}</span> : {OPERATION_KIND_HINT[k]}
+          </li>
+        ))}
+      </ul>
+      {value.length === 0 ? (
+        <div className="rounded-m border border-dashed border-border px-l py-m text-xs text-neutral-500">Aucune opération : seuls les temps de préparation des points de stock et le transport comptent.</div>
+      ) : (
+        <div className="flex flex-col gap-s">
+          {value.map((o, i) => {
+            const ek = errors[`operations[${i}].kind`];
+            const em = errors[`operations[${i}].minutes`];
+            const en = errors[`operations[${i}].name`] ?? errors[`operations[${i}]`];
+            return (
+              <div key={i} className="rounded-m border border-border px-l py-m" data-testid="operation-row">
+                <div className="grid items-start gap-m sm:grid-cols-[minmax(0,1.1fr)_minmax(0,1.3fr)_minmax(0,1fr)_auto]">
+                  <Field label="Type" error={ek}>
+                    <select
+                      className={cx('select', ek && 'invalid')}
+                      value={o.kind}
+                      onChange={(e) => setRow(i, { ...o, kind: e.target.value as ModeOperationKind })}
+                      aria-label={`Type de l'opération ${i + 1}`}
+                    >
+                      {MODE_OPERATION_KINDS.map((k) => (
+                        <option key={k} value={k}>
+                          {OPERATION_KIND_LABEL[k]}
+                        </option>
+                      ))}
+                    </select>
+                  </Field>
+                  <Field label="Nom" error={en}>
+                    <input className="input" value={o.name ?? ''} placeholder={OPERATION_DEFAULT_NAME[o.kind]} onChange={(e) => setRow(i, { ...o, name: e.target.value })} aria-label={`Nom de l'opération ${i + 1}`} />
+                  </Field>
+                  <Field label="Durée (min)" error={em} hint={fmtMinutes(o.minutes)} htmlFor={`op-minutes-${i}`}>
+                    <NumberInput id={`op-minutes-${i}`} value={o.minutes} min={0} max={20160} step={5} onChange={(n) => setRow(i, { ...o, minutes: n })} invalid={!!em} />
+                  </Field>
+                  <div className="flex items-center gap-xs sm:pt-[22px]">
+                    <button className="btn btn-tertiary btn-sm btn-icon" onClick={() => move(i, -1)} disabled={i === 0} aria-label="Monter" title="Monter">
+                      <IconChevronUp />
+                    </button>
+                    <button className="btn btn-tertiary btn-sm btn-icon" onClick={() => move(i, 1)} disabled={i === value.length - 1} aria-label="Descendre" title="Descendre">
+                      <IconChevronDown />
+                    </button>
+                    <button className="btn btn-tertiary-red btn-sm btn-icon" onClick={() => onChange(value.filter((_, j) => j !== i))} aria-label="Retirer l'opération" title="Retirer">
+                      <IconTrash />
+                    </button>
+                  </div>
+                </div>
+                <div className="mt-xs text-xs text-neutral-500">{OPERATION_KIND_HINT[o.kind]}</div>
+              </div>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }

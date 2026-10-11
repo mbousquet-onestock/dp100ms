@@ -82,6 +82,8 @@ export interface Zone {
   name: string;
   description?: string;
   departments?: string[];
+  /** Departments removed from the zone (e.g. "*" without "20"). */
+  excludedDepartments?: string[];
   postalCodes?: string[];
   stockPointIds?: string[];
   active: boolean;
@@ -281,7 +283,20 @@ export interface DeliveryMode {
   selection?: Selection | '';
   stockViewId?: string;
   priceRateCardIds?: string[];
+  /** Transport services compared for this mode (empty = services listing the mode in their own modes). */
+  serviceIds?: string[];
+  /** Timed operations around the transport (payment, validation, preparation, packing, reception). */
+  operations?: ModeOperation[];
   active: boolean;
+}
+
+export type ModeOperationKind = 'PAYMENT' | 'VALIDATION' | 'PREPARATION' | 'PACKING' | 'RECEPTION';
+export const MODE_OPERATION_KINDS: ModeOperationKind[] = ['PAYMENT', 'VALIDATION', 'PREPARATION', 'PACKING', 'RECEPTION'];
+
+export interface ModeOperation {
+  kind: ModeOperationKind;
+  name?: string;
+  minutes: number;
 }
 
 export type AttributeValue = string | number | boolean;
@@ -574,6 +589,9 @@ export interface LegResult {
   carrier: string;
   carrierName: string;
   service: string;
+  serviceName?: string;
+  /** Carrier route applied to this leg (empty = none). */
+  routeId?: string;
   serviceKind: ServiceKind;
   estimatedDeparture: ISODate;
   estimatedArrival: ISODate;
@@ -717,8 +735,35 @@ export interface Unfulfillable {
   code: string;
 }
 
+export interface CarrierUse {
+  carrierId: string;
+  carrierName: string;
+  serviceId: string;
+  serviceName: string;
+  routeIds: string[];
+  packages: number;
+}
+
+/** Best delivery route of a delivery mode (first option of the mode). */
+export interface ModeBest {
+  deliveryMode: string;
+  optionId: string;
+  strategy: string;
+  estimatedDelivery: TimeWindow;
+  leadTimeHours: number;
+  cost: number;
+  price: number;
+  carbonKg: number;
+  currency: string;
+  packages: number;
+  carriers: CarrierUse[];
+  shippingPoints: string[];
+  alternativeShippingPoints: string[];
+}
+
 export interface PromiseResponse {
   requestId: string;
+  bestByMode?: ModeBest[];
   options: PromiseOption[];
   unavailable: Unfulfillable[];
   calculationTimeMs: number;

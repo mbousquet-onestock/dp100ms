@@ -238,3 +238,55 @@ export const ADDITIONAL_KIND_LABEL: Record<string, string> = {
   APPOINTMENT: 'Rendez-vous',
   OTHER: 'Autre',
 };
+
+export const OPERATION_KIND_LABEL: Record<string, string> = {
+  PAYMENT: 'Paiement',
+  VALIDATION: 'Validation de commande',
+  PREPARATION: 'Préparation',
+  PACKING: 'Emballage',
+  RECEPTION: 'Réception',
+};
+
+/** Default name shown when an operation has no name. */
+export const OPERATION_DEFAULT_NAME: Record<string, string> = {
+  PAYMENT: 'Autorisation de paiement',
+  VALIDATION: 'Validation de commande',
+  PREPARATION: 'Préparation',
+  PACKING: 'Emballage',
+  RECEPTION: 'Réception',
+};
+
+export const OPERATION_KIND_HINT: Record<string, string> = {
+  PAYMENT: 'Avant la préparation, en temps écoulé (24 h/24) : autorisation du paiement.',
+  VALIDATION: 'Avant la préparation, en temps écoulé : contrôle de fraude, libération de la commande.',
+  PREPARATION: 'Remplace le temps de préparation des points de stock, en heures ouvrées.',
+  PACKING: "S'ajoute au temps de préparation, en heures ouvrées.",
+  RECEPTION: 'Après la livraison, en temps écoulé : décale le créneau (ex. réception en point relais ou en magasin).',
+};
+
+/** "15 min", "1 h", "1 h 30". */
+export function fmtMinutes(m: number): string {
+  if (!m) return '0 min';
+  const h = Math.floor(m / 60);
+  const r = m % 60;
+  if (!h) return `${r} min`;
+  return r ? `${h} h ${String(r).padStart(2, '0')}` : `${h} h`;
+}
+
+const CRITERION_MIN: Record<string, string> = {
+  deliveryHours: 'Le plus rapide',
+  deliveryTime: 'Le plus rapide',
+  cost: 'Le moins cher',
+  price: 'Le prix client le plus bas',
+  carbonKg: 'Le moins émetteur',
+  packages: 'Le moins de colis',
+  legs: "Le moins d'étapes",
+  sources: 'Le moins de sources',
+  distanceKm: 'Le plus proche',
+};
+
+/** Short wording of a criterion: "Le plus rapide", "Le moins cher"… */
+export function criterionLabel(c: { metric: string; direction?: string }): string {
+  if (c.direction === 'MAX') return `${metricLabel(c.metric)} max`;
+  return CRITERION_MIN[c.metric] ?? metricLabel(c.metric);
+}

@@ -1,4 +1,4 @@
-import type { CarrierRoute, Range, RateCard, RouteDay, Zone } from '../api/types';
+import type { CarrierRoute, Hub, Range, RateCard, RouteDay, StockPoint, Zone } from '../api/types';
 
 /** Variables expressed in kilograms (displayed in g or kg in the route grid). */
 export const WEIGHT_VARS = new Set(['weightKg', 'volumetricWeightKg', 'chargeableWeightKg']);
@@ -133,8 +133,11 @@ export function cleanRoute(r: CarrierRoute, costs: RateCard | undefined): Carrie
 export function zoneSummary(z: Zone): string {
   const parts: string[] = [];
   const d = z.departments ?? [];
-  if (d.includes('*')) parts.push('France métropolitaine');
-  else if (d.length) parts.push(`Dép. ${d.slice(0, 6).join(', ')}${d.length > 6 ? ` (+${d.length - 6})` : ''}`);
+  const ex = z.excludedDepartments ?? [];
+  const sauf = ex.length ? ` sauf ${ex.slice(0, 6).join(', ')}${ex.length > 6 ? ` (+${ex.length - 6})` : ''}` : '';
+  if (d.includes('*')) parts.push(`France métropolitaine${sauf}`);
+  else if (d.length) parts.push(`Dép. ${d.slice(0, 6).join(', ')}${d.length > 6 ? ` (+${d.length - 6})` : ''}${sauf}`);
+  else if (ex.length) parts.push(`Exclus : ${ex.join(', ')}`);
   if (z.postalCodes?.length) parts.push(`CP ${z.postalCodes.slice(0, 4).join(', ')}${z.postalCodes.length > 4 ? '…' : ''}`);
   if (z.stockPointIds?.length) parts.push(`${z.stockPointIds.length} point${z.stockPointIds.length > 1 ? 's' : ''} de stock`);
   return parts.join(' · ') || '–';
@@ -142,3 +145,50 @@ export function zoneSummary(z: Zone): string {
 
 
 export const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n > 1 ? many : one}`;
+
+const deptOf = (pc: string) => (pc.length < 2 ? pc : pc.startsWith('97') && pc.length >= 3 ? pc.slice(0, 3) : pc.slice(0, 2));
+const overseas = (pc: string) => pc.startsWith('97') || pc.startsWith('98');
+
+/** Same rule as the engine: excluded departments win, then "*" (metropolitan France), departments and postal code prefixes. */
+export function zoneContainsPostalCode(z: Zone, pc: string): boolean {
+  if (!pc) return false;
+  const d = deptOf(pc);
+  if ((z.excludedDepartments ?? []).includes(d)) return false;
+  const depts = z.departments ?? [];
+  if (depts.includes('*') && !overseas(pc)) return true;
+  if (pc.length >= 2 && depts.includes(d)) return true;
+  return (z.postalCodes ?? []).some((p) => pc.startsWith(p));
+}
+
+/** Active stock points of a zone: the shipping points of the routes leaving it. */
+export function zoneStockPoints(z: Zone | undefined, points: StockPoint[]): StockPoint[] {
+  if (!z) return [];
+  const ids = new Set(z.stockPointIds ?? []);
+  return points.filter((sp) => sp.active && (ids.has(sp.id) || zoneContainsPostalCode(z, sp.address?.postalCode ?? '')));
+}
+
+export interface ShippingSite {
+  id: string;
+  name: string;
+  kind: 'STOCK_POINT' | 'HUB';
+  type: string;
+  postalCode: string;
+  city: string;
+}
+
+/**
+ * Sites able to ship on a route leaving the zone (same rule as the engine):
+ * active stock points of the zone, plus hubs / platforms named explicitly in
+ * the zone's stock point list.
+ */
+export function zoneShippingSites(z: Zone | undefined, points: StockPoint[], hubs: Hub[]): ShippingSite[] {
+  if (!z) return [];
+  const ids = new Set(z.stockPointIds ?? []);
+  const out: ShippingSite[] = zoneStockPoints(z, points).map((sp) => ({ id: sp.id, name: sp.name, kind: 'STOCK_POINT', type: sp.type, postalCode: sp.address?.postalCode ?? '', city: sp.address?.city ?? '' }));
+  const seen = new Set(out.map((x) => x.id));
+  for (const h of hubs) {
+    if (!h.active || !ids.has(h.id) || seen.has(h.id) || (h.stockPointId && seen.has(h.stockPointId))) continue;
+    out.push({ id: h.id, name: h.name, kind: 'HUB', type: h.kind, postalCode: h.postalCode, city: h.city });
+  }
+  return out;
+}

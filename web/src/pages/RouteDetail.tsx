@@ -10,6 +10,7 @@ import { emptyRouteCard, RouteCosts } from '../components/route/RouteCosts';
 import { defaultPlanning, RoutePlanningEditor, RouteTestPanel, type PlanningErrors } from '../components/route/RoutePlanning';
 import { Badge, Breadcrumb, ConfirmButton, cx, EmptyState, ErrorAlert, Field, Loading, NumberInput, Spinner, Switch, useToast } from '../components/ui';
 import { cleanRoute } from '../lib/routes';
+import { ShippingPointsLine, ShippingPointsList } from '../components/route/ShippingPoints';
 
 type Tab = 'costs' | 'attributes' | 'planning' | 'metadata';
 const TABS: { value: Tab; label: string }[] = [
@@ -156,6 +157,7 @@ function RouteEditor({ initial, isNew }: { initial: CarrierRoute; isNew: boolean
             {(carrier?.name ?? v.carrierId).toLowerCase()} - {svc?.name ?? v.serviceId}
           </div>
           {(v.name || !isNew) && <div className="text-xs text-neutral-500">{[v.name, v.id].filter(Boolean).join(' · ')}</div>}
+          {v.originZoneId && <ShippingPointsLine zoneId={v.originZoneId} />}
         </div>
         <div className="flex flex-wrap items-center gap-m">
           {!isNew && <ConfirmButton small={false} label="Supprimer" confirmLabel="Supprimer la route" pending={crud.remove.isPending} onConfirm={remove} />}
@@ -292,6 +294,10 @@ function AttributesTab({
         <div className="mt-l">
           <Switch checked={v.active} onChange={(b) => set('active', b)} label={v.active ? 'Route active' : 'Route inactive'} />
         </div>
+      </section>
+      <section>
+        <h3 className="os-title-s m-0 mb-s">Points d'expédition</h3>
+        {v.originZoneId ? <ShippingPointsList zoneId={v.originZoneId} /> : <div className="text-xs text-neutral-500">Choisir une zone d'origine.</div>}
       </section>
       <section>
         <h3 className="os-title-s m-0 mb-s">Restrictions de la route</h3>

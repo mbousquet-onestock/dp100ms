@@ -54,7 +54,7 @@ export const defaultSimForm = (): SimForm => ({
   additionalServices: [],
   useOrderAmount: false,
   orderAmount: 0,
-  useAlternatives: false,
+  useAlternatives: true,
   altLimit: 5,
   altSort: 'deliveryHours',
   useCriteria: false,

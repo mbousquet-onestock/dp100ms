@@ -9,6 +9,7 @@ import { CarrierDrawer, CarrierIcon } from '../components/carrier/CarrierDrawer'
 import { CarrierServices } from '../components/carrier/CarrierServices';
 import { CarrierSchedules } from '../components/carrier/CarrierSchedules';
 import { CarrierRestrictions } from '../components/carrier/CarrierRestrictions';
+import { shippingPointsLabel, useZoneShippingPoints } from '../components/route/ShippingPoints';
 import { costRange, fmtCostRange, fmtHours, plural } from '../lib/routes';
 
 type Tab = 'routes' | 'services' | 'restrictions' | 'schedules';
@@ -122,6 +123,7 @@ type SortKey = 'origin' | 'destination' | 'service' | 'cost' | 'min' | 'max';
 function RoutesTab({ carrier, routes, loading, error }: { carrier: Carrier; routes: CarrierRoute[]; loading: boolean; error: unknown }) {
   const zones = useZones();
   const services = useServices(carrier.id);
+  const shippingPoints = useZoneShippingPoints();
   const navigate = useNavigate();
   const [origin, setOrigin] = useState('');
   const [dest, setDest] = useState('');
@@ -242,6 +244,11 @@ function RoutesTab({ carrier, routes, loading, error }: { carrier: Carrier; rout
                 <tr key={r.id} className="clickable" onClick={() => navigate(`/carriers/${encodeURIComponent(carrier.id)}/routes/${encodeURIComponent(r.id)}`)} data-testid="route-row">
                   <td>
                     <div>{zoneName(r.originZoneId)}</div>
+                    {shippingPoints(r.originZoneId) && (
+                      <div className="text-xs text-neutral-500" data-testid="route-shipping-points">
+                        {shippingPointsLabel(shippingPoints(r.originZoneId)!.length)}
+                      </div>
+                    )}
                     {(r.name || !r.active) && (
                       <div className="flex items-center gap-s text-xs text-neutral-500">
                         {r.name}

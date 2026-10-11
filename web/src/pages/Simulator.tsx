@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { ApiError, api, errorMessage } from '../api/client';
-import { qk, useAdditionalServices, useModes, useRunScenario, useScenarios, useSimulate, useStockViews, type Timed } from '../api/hooks';
+import { qk, useAdditionalServices, useAllStockPoints, useModes, useRunScenario, useScenarios, useSimulate, useStockViews, type Timed } from '../api/hooks';
 import { CriteriaEditor } from '../components/pricing/CriteriaEditor';
 import type { AlternativesSort, PackageAlternative, PackageResult, PromiseOption, Scenario, SimulationResponse } from '../api/types';
 import { IconBox, IconChevronDown, IconChevronUp, IconClock, IconEuro, IconHub, IconLeaf, IconMap, IconPlay, IconPlus, IconRoute, IconTool, IconTrash } from '../components/Icons';
@@ -12,6 +12,7 @@ import { SkuInput } from '../components/sim/SkuInput';
 import { Alert, Badge, Card, Checkbox, ChipSelect, cx, EmptyState, ErrorAlert, Field, Modal, NumberInput, PageHeader, ScoreBar, Spinner, Switch, useToast } from '../components/ui';
 import { fmtCarbon, fmtDateTime, fmtInt, fmtKm, fmtMoney, fmtMs, fmtNum, fmtShort, fmtWindow } from '../lib/format';
 import { ADDITIONAL_KIND_LABEL, metricLabel, modeBadge, NODE_BADGE, outputLabel, PACKAGE_COLORS, STOCK_POINT_TYPE_LABEL, SHIPMENT_KIND_LABEL, STRATEGY_BADGE, STRATEGY_LABEL, TIMELINE_LABEL, UNAVAILABLE_LABEL } from '../lib/labels';
+import { fmtHours } from '../lib/routes';
 import { fromRequest, loadSimForm, saveSimForm, toRequest, type SimForm } from '../lib/simState';
 
 export default function Simulator() {
@@ -326,6 +327,16 @@ function Results({ result, selected, onSelect, pending }: { result: Timed<Simula
         </Alert>
       ) : (
         <>
+          {(r.bestByMode ?? []).length > 0 && (
+            <BestRoutes
+              r={r}
+              selected={opt?.id}
+              onSelect={(id) => {
+                onSelect(id);
+                requestAnimationFrame(() => document.getElementById('sim-option-detail')?.scrollIntoView({ behavior: 'smooth', block: 'start' }));
+              }}
+            />
+          )}
           <div className="grid gap-l sm:grid-cols-2 2xl:grid-cols-3">
             {r.options.map((o, i) => (
               <OptionCard key={o.id} o={o} rank={i + 1} active={o.id === opt?.id} onClick={() => onSelect(o.id)} />
@@ -338,6 +349,134 @@ function Results({ result, selected, onSelect, pending }: { result: Timed<Simula
 
       <StockTable r={r} />
     </div>
+  );
+}
+
+/** "Meilleure route par mode": one card per requested mode from bestByMode. */
+function BestRoutes({ r, selected, onSelect }: { r: SimulationResponse; selected?: string; onSelect: (optionId: string) => void }) {
+  const points = useAllStockPoints();
+  const names = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const sp of points.data?.items ?? []) m.set(sp.id, `${sp.name}`);
+    for (const o of r.options) for (const p of o.packages) for (const a of p.alternatives ?? []) m.set(a.stockPointId, a.name);
+    for (const [id, n] of Object.entries(r.nodes ?? {})) m.set(id, n.name);
+    return m;
+  }, [points.data, r]);
+  const name = (id: string) => names.get(id) ?? id;
+  const list = r.bestByMode ?? [];
+  return (
+    <section data-testid="best-routes">
+      <div className="mb-m flex flex-wrap items-baseline justify-between gap-m">
+        <h2 className="os-title-s m-0">Meilleure route par mode</h2>
+        <span className="text-xs text-neutral-500">Route retenue selon les priorités de chaque mode : délai, coût, transporteur et points d'expédition possibles.</span>
+      </div>
+      <div className="grid gap-l md:grid-cols-2 2xl:grid-cols-3">
+        {list.map((b) => {
+          const active = b.optionId === selected;
+          return (
+            <div
+              key={b.deliveryMode}
+              role="button"
+              tabIndex={0}
+              onClick={() => onSelect(b.optionId)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault();
+                  onSelect(b.optionId);
+                }
+              }}
+              className={cx('card flex min-w-0 cursor-pointer flex-col gap-m p-l text-left hover:bg-neutral-20', active && 'border-primary')}
+              style={active ? { boxShadow: 'inset 0 0 0 1px var(--primary-1000)' } : undefined}
+              aria-pressed={active}
+              data-testid="best-route-card"
+            >
+              <div className="flex flex-wrap items-center gap-s">
+                <Badge color={modeBadge(b.deliveryMode)}>{b.deliveryMode}</Badge>
+                <Badge color={STRATEGY_BADGE[b.strategy] ?? 'grey'}>{STRATEGY_LABEL[b.strategy] ?? b.strategy}</Badge>
+                <span className="ml-auto text-xs text-neutral-500">{b.optionId}</span>
+              </div>
+              <div className="flex items-center gap-s text-m font-medium text-neutral-800">
+                <IconClock size={18} className="flex-none text-neutral-500" />
+                {fmtWindow(b.estimatedDelivery.from, b.estimatedDelivery.to)}
+              </div>
+              <div className="grid grid-cols-2 gap-m text-xs text-neutral-500 sm:grid-cols-4">
+                <div>
+                  <div className="text-s font-medium text-neutral-800">{fmtHours(Math.round(b.leadTimeHours))}</div>
+                  Délai
+                </div>
+                <div>
+                  <div className="text-s font-medium text-neutral-800">{fmtMoney(b.cost, b.currency)}</div>
+                  Coût
+                </div>
+                <div>
+                  <div className="text-s font-medium text-neutral-800">{b.price === 0 ? 'Offert' : fmtMoney(b.price, b.currency)}</div>
+                  Prix client
+                </div>
+                <div>
+                  <div className="text-s font-medium text-neutral-800">{fmtNum(b.carbonKg, 3)}</div>
+                  kg CO2e
+                </div>
+              </div>
+              <div className="flex flex-col gap-s border-t border-border pt-m">
+                {b.carriers.map((c) => (
+                  <div key={`${c.carrierId}-${c.serviceId}`} className="flex min-w-0 gap-s text-s">
+                    <IconRoute size={16} className="mt-[2px] flex-none text-neutral-500" />
+                    <div className="min-w-0 flex-1">
+                      <div>
+                        <span className="font-medium text-neutral-800">
+                          {c.carrierName.toLowerCase()} - {c.serviceName || c.serviceId}
+                        </span>{' '}
+                        <span className="whitespace-nowrap text-xs text-neutral-500">({c.packages} colis)</span>
+                      </div>
+                      <div className="mt-xs flex flex-wrap gap-s">
+                        {c.routeIds.length ? (
+                          c.routeIds.map((rid) => (
+                            <Link
+                              key={rid}
+                              to={`/carriers/${encodeURIComponent(c.carrierId)}/routes/${encodeURIComponent(rid)}`}
+                              onClick={(e) => e.stopPropagation()}
+                              className="break-all rounded-s border border-border bg-neutral-20 px-s py-xs text-2xs text-primary hover:underline"
+                              data-testid="best-route-link"
+                              title="Ouvrir la route"
+                            >
+                              {rid}
+                            </Link>
+                          ))
+                        ) : (
+                          <span className="text-xs text-neutral-500">Sans route transporteur (legs explicites)</span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <div className="border-t border-border pt-m text-xs">
+                <div className="os-label mb-xs">Points d'expédition ({b.shippingPoints.length})</div>
+                <div className="flex flex-wrap gap-s" data-testid="best-shipping-points">
+                  {b.shippingPoints.map((id) => (
+                    <span key={id} className="badge badge-blue" title={id}>
+                      {name(id)}
+                    </span>
+                  ))}
+                </div>
+                <div className="os-label mb-xs mt-m">Points d'expédition alternatifs ({b.alternativeShippingPoints.length})</div>
+                {b.alternativeShippingPoints.length ? (
+                  <div className="flex flex-wrap gap-s" data-testid="best-alternative-points">
+                    {b.alternativeShippingPoints.map((id) => (
+                      <span key={id} className="badge badge-grey" title={id}>
+                        {name(id)}
+                      </span>
+                    ))}
+                  </div>
+                ) : (
+                  <span className="text-neutral-500">{r.request.alternatives ? 'Aucun autre point ne peut expédier ces colis.' : 'Activer « Origines alternatives par colis » pour les obtenir.'}</span>
+                )}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </section>
   );
 }
 
@@ -471,7 +610,7 @@ function OptionDetail({ o, r }: { o: PromiseOption; r: SimulationResponse }) {
   const pkgColor = (pid: string) => PACKAGE_COLORS[Math.max(0, o.packages.findIndex((p) => p.packageId === pid)) % PACKAGE_COLORS.length];
   const extraLegMetrics = Array.from(new Set(o.shipments.flatMap((s) => s.legs.flatMap((l) => Object.keys(l.metrics ?? {}))))).filter((k) => k !== 'cost' && k !== 'carbonKg' && k !== 'price');
   return (
-    <div className="flex flex-col gap-l" data-testid="option-detail">
+    <div className="flex scroll-mt-l flex-col gap-l" data-testid="option-detail" id="sim-option-detail">
       <div className="flex flex-wrap items-center gap-m">
         <h2 className="os-title-m m-0">Détail de l'option {o.id}</h2>
         <Badge color={modeBadge(o.deliveryMode)}>{o.deliveryMode}</Badge>
@@ -567,12 +706,30 @@ function OptionDetail({ o, r }: { o: PromiseOption; r: SimulationResponse }) {
                       </span>
                     ) : null}
                   </td>
-                  <td className="text-xs">{l.legId}</td>
+                  <td className="text-xs">
+                    <div>{l.legId}</div>
+                    {l.routeId && (
+                      <Link className="text-primary hover:underline" to={`/carriers/${encodeURIComponent(l.carrier)}/routes/${encodeURIComponent(l.routeId)}`} data-testid="leg-route">
+                        Route {l.routeId}
+                      </Link>
+                    )}
+                  </td>
                   <td>{nodeLabel(l.from)}</td>
                   <td>{nodeLabel(l.to)}</td>
                   <td>{l.carrierName}</td>
                   <td className="text-xs">
-                    {l.service} · {l.serviceKind}
+                    {l.serviceName ? (
+                      <>
+                        <div>{l.serviceName}</div>
+                        <div className="text-neutral-500">
+                          {l.service} · {l.serviceKind}
+                        </div>
+                      </>
+                    ) : (
+                      <>
+                        {l.service} · {l.serviceKind}
+                      </>
+                    )}
                   </td>
                   <td className="whitespace-nowrap">{fmtShort(l.estimatedDeparture)}</td>
                   <td className="whitespace-nowrap">{fmtShort(l.estimatedArrival)}</td>
