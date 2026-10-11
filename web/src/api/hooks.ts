@@ -2,7 +2,15 @@ import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tansta
 import { useSyncExternalStore } from 'react';
 import { api, tokenStore } from './client';
 import type {
+  AdditionalService,
   BenchRun,
+  DatabaseStatus,
+  PricingFields,
+  QuoteRequest,
+  QuoteResponse,
+  RateCard,
+  StockView,
+  StockViewPreview,
   Carrier,
   CarrierService,
   CompiledRoutes,
@@ -55,6 +63,13 @@ export const qk = {
   benchmark: (id: string) => ['benchmarks', id] as const,
   presets: ['benchmarks', 'presets'] as const,
   openapi: ['openapi'] as const,
+  rateCards: (p: object) => ['rate-cards', p] as const,
+  additionalServices: ['additional-services'] as const,
+  stockViews: ['stock-views'] as const,
+  stockViewPreview: (id: string) => ['stock-views', 'preview', id] as const,
+  pricingFields: ['pricing', 'fields'] as const,
+  skuPage: (p: object) => ['skus', 'page', p] as const,
+  database: (t: string) => ['admin', 'database', t] as const,
 };
 
 // ---------------------------------------------------------------------------
@@ -164,6 +179,56 @@ export const useBenchmark = (id: string | null) =>
   });
 
 export const usePresets = () => useQuery({ queryKey: qk.presets, queryFn: () => api.get<RunConfig[]>('/benchmarks/presets'), staleTime: Infinity });
+
+// ---------------------------------------------------------------------------
+// Pricing
+
+export const usePricingFields = () =>
+  useQuery({ queryKey: qk.pricingFields, queryFn: () => api.get<PricingFields>('/pricing/fields'), staleTime: 60000 });
+
+export const useRateCards = (p: { scope?: string; carrierId?: string; q?: string } = {}) =>
+  useQuery({
+    queryKey: qk.rateCards(p),
+    queryFn: () => api.get<Page<RateCard>>('/rate-cards', { pageSize: 1000, ...p }),
+    placeholderData: keepPreviousData,
+  });
+
+export const useAdditionalServices = () =>
+  useQuery({ queryKey: qk.additionalServices, queryFn: () => api.get<Page<AdditionalService>>('/additional-services', { pageSize: 1000 }) });
+
+export const useStockViews = () => useQuery({ queryKey: qk.stockViews, queryFn: () => api.get<Page<StockView>>('/stock-views', { pageSize: 1000 }) });
+
+export const useStockViewPreview = (id: string | null) =>
+  useQuery({
+    queryKey: qk.stockViewPreview(id ?? ''),
+    queryFn: () => api.get<StockViewPreview>(`/stock-views/${encodeURIComponent(id!)}/preview`),
+    enabled: !!id,
+    retry: false,
+  });
+
+export const useSkuPage = (p: { q?: string; page: number; pageSize: number }) =>
+  useQuery({ queryKey: qk.skuPage(p), queryFn: () => api.get<Page<SKU>>('/skus', { ...p }), placeholderData: keepPreviousData });
+
+/** Quote a saved card (id) or an inline card (body.card). */
+export const useQuote = () =>
+  useMutation({
+    mutationFn: ({ id, body }: { id?: string; body: QuoteRequest }) =>
+      api.post<QuoteResponse>(id ? `/rate-cards/${encodeURIComponent(id)}/quote` : '/rate-cards/quote', body, false),
+  });
+
+export const useDatabaseStatus = (token: string) =>
+  useQuery({ queryKey: qk.database(token), queryFn: () => api.get<DatabaseStatus>('/admin/database', undefined, undefined, true), retry: false });
+
+export function useSkuUpdate() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (v: SKU) => api.put<SKU>(`/skus/${encodeURIComponent(v.sku)}`, v),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['skus'] });
+      qc.invalidateQueries({ queryKey: qk.pricingFields });
+    },
+  });
+}
 
 // ---------------------------------------------------------------------------
 // Mutations

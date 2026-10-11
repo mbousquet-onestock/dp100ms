@@ -15,6 +15,10 @@ const Scenarios = lazy(() => import('./pages/Scenarios'));
 const Benchmarks = lazy(() => import('./pages/Benchmarks'));
 const Docs = lazy(() => import('./pages/Docs'));
 const Settings = lazy(() => import('./pages/Settings'));
+const RateCards = lazy(() => import('./pages/RateCards'));
+const AdditionalServices = lazy(() => import('./pages/AdditionalServices'));
+const StockViews = lazy(() => import('./pages/StockViews'));
+const Skus = lazy(() => import('./pages/Skus'));
 
 export function App() {
   return (
@@ -32,6 +36,10 @@ export function App() {
         <Route path="benchmarks" element={<Lazy el={<Benchmarks />} />} />
         <Route path="docs" element={<Lazy el={<Docs />} />} />
         <Route path="settings" element={<Lazy el={<Settings />} />} />
+        <Route path="rate-cards" element={<Lazy el={<RateCards />} />} />
+        <Route path="additional-services" element={<Lazy el={<AdditionalServices />} />} />
+        <Route path="stock-views" element={<Lazy el={<StockViews />} />} />
+        <Route path="skus" element={<Lazy el={<Skus />} />} />
         <Route path="*" element={<EmptyState title="Page introuvable">Cette adresse ne correspond à aucun écran.</EmptyState>} />
       </Route>
     </Routes>

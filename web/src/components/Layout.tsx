@@ -3,8 +3,11 @@ import { NavLink, Outlet, useLocation } from 'react-router-dom';
 import { useAdminToken, useAuthCheck, useHealth } from '../api/hooks';
 import { DEFAULT_TOKEN } from '../api/client';
 import {
-
+  IconBox,
   IconChart,
+  IconEuro,
+  IconLayers,
+  IconTool,
   IconChevronLeft,
   IconChevronRight,
   IconClose,
@@ -47,6 +50,15 @@ const NAV: { section?: string; items: NavItem[] }[] = [
       { to: '/hubs', label: 'Hubs', Icon: IconHub },
       { to: '/carriers', label: 'Transporteurs', Icon: IconTruck },
       { to: '/delivery-modes', label: 'Modes de livraison', Icon: IconTag },
+    ],
+  },
+  {
+    section: 'Catalogue et tarification',
+    items: [
+      { to: '/skus', label: 'Articles', Icon: IconBox },
+      { to: '/rate-cards', label: 'Grilles tarifaires', Icon: IconEuro },
+      { to: '/additional-services', label: 'Services associés', Icon: IconTool },
+      { to: '/stock-views', label: 'Vues de stock', Icon: IconLayers },
     ],
   },
   {

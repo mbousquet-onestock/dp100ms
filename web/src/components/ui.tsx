@@ -474,3 +474,92 @@ export function DL({ items, cols = 2 }: { items: [ReactNode, ReactNode][]; cols?
     </dl>
   );
 }
+
+/** Button opening a floating panel rendered in a portal (not clipped by scrolling tables). */
+export function PopoverButton({ label, children, className, title, width = 300, testId }: { label: ReactNode; children: ReactNode | ((close: () => void) => ReactNode); className?: string; title?: string; width?: number; testId?: string }) {
+  const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
+  const btn = useRef<HTMLButtonElement>(null);
+  const panel = useRef<HTMLDivElement>(null);
+  const close = useCallback(() => setPos(null), []);
+  useEffect(() => {
+    if (!pos) return;
+    const down = (e: MouseEvent) => {
+      const t = e.target as Node;
+      if (panel.current?.contains(t) || btn.current?.contains(t)) return;
+      setPos(null);
+    };
+    const key = (e: KeyboardEvent) => e.key === 'Escape' && setPos(null);
+    document.addEventListener('mousedown', down);
+    window.addEventListener('keydown', key);
+    window.addEventListener('resize', close);
+    return () => {
+      document.removeEventListener('mousedown', down);
+      window.removeEventListener('keydown', key);
+      window.removeEventListener('resize', close);
+    };
+  }, [pos, close]);
+  const toggle = () => {
+    if (pos) return setPos(null);
+    const r = btn.current!.getBoundingClientRect();
+    const left = Math.max(8, Math.min(window.innerWidth - width - 8, r.left));
+    setPos({ top: r.bottom + window.scrollY + 4, left: left + window.scrollX });
+  };
+  return (
+    <>
+      <button ref={btn} type="button" className={className ?? 'btn btn-tertiary btn-sm'} onClick={toggle} title={title} aria-label={title} aria-expanded={!!pos} data-testid={testId}>
+        {label}
+      </button>
+      {pos &&
+        createPortal(
+          <div ref={panel} className="popover absolute z-[1700] p-l" style={{ top: pos.top, left: pos.left, width }}>
+            {typeof children === 'function' ? children(close) : children}
+          </div>,
+          document.body,
+        )}
+    </>
+  );
+}
+
+/** Optional number input: empty string = undefined (open bound). */
+export function OptNumberInput({ value, onChange, placeholder, step, invalid, className, ariaLabel }: { value: number | undefined; onChange: (v: number | undefined) => void; placeholder?: string; step?: number; invalid?: boolean; className?: string; ariaLabel?: string }) {
+  return (
+    <input
+      type="number"
+      className={cx('input', invalid && 'invalid', className)}
+      value={value === undefined || value === null || Number.isNaN(value) ? '' : value}
+      step={step ?? 'any'}
+      placeholder={placeholder}
+      aria-label={ariaLabel ?? placeholder}
+      onChange={(e) => onChange(e.target.value === '' ? undefined : Number(e.target.value))}
+    />
+  );
+}
+
+/** Segmented control (OneStock tabs-like toggle). */
+export function Segmented<T extends string>({ options, value, onChange, className }: { options: { value: T; label: ReactNode }[]; value: T; onChange: (v: T) => void; className?: string }) {
+  return (
+    <div className={cx('segmented', className)} role="group">
+      {options.map((o) => (
+        <button key={o.value} type="button" aria-pressed={o.value === value} onClick={() => onChange(o.value)}>
+          {o.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+/** Field errors whose name starts with a prefix (after an optional root such as "rateCard."). */
+export function errorsUnder(err: unknown, prefix: string, roots: string[] = []): FieldErrorLike[] {
+  if (!(err instanceof ApiError)) return [];
+  return err.fieldErrors
+    .map((f) => {
+      let field = f.field;
+      for (const r of roots) if (field.startsWith(r + '.')) field = field.slice(r.length + 1);
+      return { field, message: f.message };
+    })
+    .filter((f) => f.field === prefix || f.field.startsWith(prefix + '.') || f.field.startsWith(prefix + '['));
+}
+export interface FieldErrorLike {
+  field: string;
+  message: string;
+}

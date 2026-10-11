@@ -102,6 +102,10 @@ export interface CarrierService {
   dailyCapacity: number;
   baseCost: number;
   costPerKg: number;
+  rateCardIds?: string[];
+  carbonGramsPerKgKm?: number;
+  restrictions?: Restriction[];
+  additionalServiceIds?: string[];
   active: boolean;
 }
 
@@ -150,6 +154,8 @@ export interface Leg {
   extraCost: number;
   maxWeightKg?: number;
   modes?: string[];
+  rateCardIds?: string[];
+  restrictions?: Restriction[];
   active: boolean;
 }
 
@@ -172,8 +178,14 @@ export interface DeliveryMode {
   allowSplit: boolean;
   maxDeliveryDays: number;
   price: number;
+  criteria?: Criterion[];
+  selection?: Selection | '';
+  stockViewId?: string;
+  priceRateCardIds?: string[];
   active: boolean;
 }
+
+export type AttributeValue = string | number | boolean;
 
 export interface SKU {
   sku: string;
@@ -181,6 +193,188 @@ export interface SKU {
   category: string;
   weightKg: number;
   volumeL: number;
+  lengthCm: number;
+  widthCm: number;
+  heightCm: number;
+  priceEur: number;
+  attributes?: Record<string, AttributeValue>;
+}
+
+// ---------------------------------------------------------------------------
+// Pricing: article rules, rate cards, additional services, stock views, criteria
+
+export type RuleOp = 'eq' | 'neq' | 'in' | 'nin' | 'lt' | 'lte' | 'gt' | 'gte' | 'between' | 'exists' | 'missing' | 'contains';
+export type RuleValue = string | number | boolean;
+
+export interface Rule {
+  field: string;
+  op: RuleOp;
+  value?: RuleValue;
+  values?: RuleValue[];
+}
+
+export type RestrictionMode = 'EXCLUDE_IF_ANY' | 'REQUIRE_ALL';
+
+export interface Restriction {
+  name: string;
+  mode: RestrictionMode;
+  rules: Rule[];
+}
+
+export type RateScope = 'PARCEL' | 'SHIPMENT' | 'ORDER';
+export const RATE_SCOPES: RateScope[] = ['PARCEL', 'SHIPMENT', 'ORDER'];
+
+export interface Term {
+  var: string;
+  coef: number;
+}
+
+export interface DerivedMetric {
+  key: string;
+  label?: string;
+  terms: Term[];
+}
+
+/** [min, max) on a variable; missing bounds are open. */
+export interface Range {
+  min?: number;
+  max?: number;
+}
+
+export interface Components {
+  fixed?: number;
+  perKg?: number;
+  perItem?: number;
+  perParcel?: number;
+  perKm?: number;
+  perKgKm?: number;
+  percentOfValue?: number;
+  perUnit?: Record<string, number>;
+  min?: number;
+  max?: number;
+}
+
+export type Outputs = Record<string, Components>;
+
+export interface RateRow {
+  label?: string;
+  conditions?: Record<string, Range>;
+  zones?: string[];
+  outputs: Outputs;
+}
+
+export interface Surcharge {
+  label: string;
+  conditions?: Record<string, Range>;
+  zones?: string[];
+  rules?: Rule[];
+  outputs: Outputs;
+}
+
+export type NoMatch = 'REJECT' | 'ZERO' | '';
+
+export interface RateCard {
+  id: string;
+  name: string;
+  description?: string;
+  carrierId?: string;
+  scope: RateScope;
+  currency: string;
+  volumetricDivisor?: number;
+  derived?: DerivedMetric[];
+  rows: RateRow[];
+  surcharges?: Surcharge[];
+  noMatch?: NoMatch;
+  active: boolean;
+}
+
+export interface QuoteRequest {
+  card?: RateCard;
+  items?: BasketItem[];
+  vars?: Record<string, number>;
+  zone?: string;
+  orderAmount?: number;
+}
+
+export interface QuoteResponse {
+  cardId: string;
+  scope: RateScope;
+  matched: boolean;
+  vars: Record<string, number>;
+  outputs: Record<string, number>;
+  warnings?: string[];
+}
+
+export interface AdditionalService {
+  id: string;
+  name: string;
+  kind: string;
+  description?: string;
+  appliesTo?: Rule[];
+  outputs: Outputs;
+  extraDays: number;
+  active: boolean;
+}
+
+export interface StockView {
+  id: string;
+  name: string;
+  description?: string;
+  pointIds?: string[];
+  pointTypes?: string[];
+  departments?: string[];
+  excludePointIds?: string[];
+  articleRules?: Rule[];
+  reserve: number;
+  active: boolean;
+}
+
+export interface StockViewPreview {
+  id: string;
+  stockPoints: number;
+  pointIds: string[];
+  skus: number;
+  reserve: number;
+}
+
+export type Selection = 'WEIGHTED' | 'LEXICOGRAPHIC';
+
+export interface Criterion {
+  metric: string;
+  direction?: 'MIN' | 'MAX' | '';
+  weight: number;
+  priority: number;
+  max?: number;
+  tolerance?: number;
+}
+
+export interface PricingFields {
+  articleFields: string[];
+  articleAttributes: string[];
+  ruleOperators: RuleOp[];
+  restrictionModes: RestrictionMode[];
+  rateVariables: string[];
+  rateScopes: RateScope[];
+  outputs: string[];
+  criteriaMetrics: string[];
+  selections: Selection[];
+  additionalServiceKinds: string[];
+  warnings: string[] | null;
+}
+
+export interface DatasetMeta {
+  seed: number;
+  stockMode: 'delta' | 'full' | string;
+  generatedAt: ISODate;
+  initializedAt?: ISODate;
+  stockRows: number;
+}
+
+export interface DatabaseStatus {
+  persistence: boolean;
+  detail?: string;
+  dataset?: DatasetMeta;
+  lastPersistError?: string;
 }
 
 export interface StockLine {
@@ -253,7 +447,20 @@ export interface PromiseRequest {
   maxOptions?: number;
   constraints?: PackageConstraints;
   weights?: ScoringWeights;
+  stockViewId?: string;
+  additionalServices?: string[];
+  orderAmount?: number;
+  alternatives?: AlternativesRequest;
+  criteria?: Criterion[];
+  selection?: Selection;
   debug?: boolean;
+}
+
+export type AlternativesSort = 'deliveryHours' | 'distanceKm' | 'cost' | 'price' | 'carbonKg';
+
+export interface AlternativesRequest {
+  limit?: number;
+  sortBy?: AlternativesSort;
 }
 
 export interface TimeWindow {
@@ -271,6 +478,8 @@ export interface LegResult {
   serviceKind: ServiceKind;
   estimatedDeparture: ISODate;
   estimatedArrival: ISODate;
+  distanceKm: number;
+  metrics?: Record<string, number>;
   cost: number;
 }
 
@@ -284,6 +493,35 @@ export interface PackageResult {
   hubs: string[];
   consolidationId?: string;
   estimatedDelivery: TimeWindow;
+  leadTimeHours: number;
+  distanceKm: number;
+  metrics: Record<string, number>;
+  alternatives?: PackageAlternative[];
+}
+
+export interface PackageAlternative {
+  stockPointId: string;
+  name: string;
+  type: string;
+  city: string;
+  distanceKm: number;
+  estimatedDelivery: TimeWindow;
+  deliveryHours: number;
+  parcels: number;
+  carriers: string[];
+  route: string[];
+  metrics: Record<string, number>;
+  current: boolean;
+}
+
+export interface AdditionalServiceResult {
+  id: string;
+  name: string;
+  kind: string;
+  requested: boolean;
+  items: BasketItem[];
+  extraDays: number;
+  metrics: Record<string, number>;
 }
 
 export interface Allocation {
@@ -330,6 +568,8 @@ export interface TimelineEvent {
 }
 
 export interface ScoreBreakdown {
+  price: number;
+  carbonKg: number;
   deliveryHours: number;
   packages: number;
   cost: number;
@@ -355,6 +595,9 @@ export interface PromiseOption {
   consolidations: ConsolidationResult[];
   timeline: TimelineEvent[];
   criteria: ScoreBreakdown;
+  metrics: Record<string, number>;
+  additionalServices: AdditionalServiceResult[] | null;
+  stockViewId?: string;
   score: number;
 }
 

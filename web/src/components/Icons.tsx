@@ -228,6 +228,34 @@ export const IconTag = make(
   </>,
   'IconTag',
 );
+export const IconEuro = make(
+  <>
+    <path d="M17.5 6.5A7 7 0 1 0 17.5 17.5" />
+    <path d="M4 10h9M4 14h9" />
+  </>,
+  'IconEuro',
+);
+export const IconTool = make(
+  <>
+    <path d="M14.5 6.5a4 4 0 0 0 5 5L21 13l-8 8-3-3 1.5-1.5a4 4 0 0 0-5-5L5 13 3 11l8-8 2 2z" />
+  </>,
+  'IconTool',
+);
+export const IconLeaf = make(
+  <>
+    <path d="M5 19c0-8 5-13 14-14-1 9-6 14-14 14z" />
+    <path d="M5 19 13 11" />
+  </>,
+  'IconLeaf',
+);
+export const IconDatabase = make(
+  <>
+    <ellipse cx="12" cy="6" rx="7" ry="2.5" />
+    <path d="M5 6v12c0 1.4 3.1 2.5 7 2.5s7-1.1 7-2.5V6" />
+    <path d="M5 12c0 1.4 3.1 2.5 7 2.5s7-1.1 7-2.5" />
+  </>,
+  'IconDatabase',
+);
 export const IconSpinner = ({ size = 20, ...rest }: P) => (
   <svg width={size} height={size} viewBox="0 0 24 24" fill="none" className="os-spin" aria-hidden="true" {...rest}>
     <circle cx="12" cy="12" r="9" stroke="currentColor" strokeOpacity="0.2" strokeWidth="2.5" />

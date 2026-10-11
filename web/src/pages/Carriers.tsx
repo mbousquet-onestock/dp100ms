@@ -1,12 +1,13 @@
 import { useEffect, useState } from 'react';
 import { ApiError, errorMessage } from '../api/client';
-import { qk, useCarriers, useCrud, useModes, useServices } from '../api/hooks';
+import { qk, useAdditionalServices, useCarriers, useCrud, useModes, useRateCards, useServices } from '../api/hooks';
 import type { Carrier, CarrierService } from '../api/types';
 import { SERVICE_KINDS } from '../api/types';
 import { IconEdit, IconPlus, IconTruck } from '../components/Icons';
 import { Badge, Card, ChipSelect, ConfirmButton, cx, Drawer, EmptyState, ErrorAlert, Field, ListInput, Loading, NumberInput, PageHeader, Spinner, Switch, useToast, WeekdayToggles } from '../components/ui';
 import { fmtMoney } from '../lib/format';
-import { SERVICE_KIND_LABEL } from '../lib/labels';
+import { RATE_SCOPE_LABEL, SERVICE_KIND_LABEL } from '../lib/labels';
+import { RestrictionsEditor } from '../components/pricing/RuleBuilder';
 
 const emptyService = (carrierId: string): CarrierService => ({
   id: '',
@@ -222,7 +223,14 @@ function ServicesCard({ carrierId, carrier }: { carrierId: string; carrier?: Car
                   {s.windowStart} – {s.windowEnd}
                 </td>
                 <td className="num whitespace-nowrap text-xs">
-                  {fmtMoney(s.baseCost)} + {fmtMoney(s.costPerKg)}/kg
+                  {(s.rateCardIds ?? []).length ? (
+                    <span title={s.rateCardIds!.join(', ')}>{s.rateCardIds!.length === 1 ? s.rateCardIds![0] : `${s.rateCardIds!.length} grilles`}</span>
+                  ) : (
+                    <>
+                      {fmtMoney(s.baseCost)} + {fmtMoney(s.costPerKg)}/kg
+                    </>
+                  )}
+                  {(s.restrictions ?? []).length > 0 && <div className="text-neutral-500">{s.restrictions!.length} restriction{s.restrictions!.length > 1 ? 's' : ''}</div>}
                 </td>
                 <td>{s.active ? <Badge color="green">Actif</Badge> : <Badge color="grey">Inactif</Badge>}</td>
                 <td className="text-right">
@@ -246,6 +254,8 @@ function ServiceDrawer({ state, onClose, crud }: { state: { v: CarrierService; i
   const [v, setV] = useState<CarrierService | null>(null);
   const modes = useModes();
   const carriers = useCarriers();
+  const cards = useRateCards();
+  const extras = useAdditionalServices();
   const toast = useToast();
   const m = state?.isNew ? crud.create : crud.update;
   useEffect(() => {
@@ -270,7 +280,23 @@ function ServiceDrawer({ state, onClose, crud }: { state: { v: CarrierService; i
           <button className="btn btn-secondary" onClick={onClose}>
             Annuler
           </button>
-          <button className="btn btn-primary" disabled={m.isPending} onClick={() => m.mutate(v, { onSuccess: () => { toast('Enregistré'); onClose(); } })}>
+          <button
+            className="btn btn-primary"
+            disabled={m.isPending}
+            data-testid="save-service"
+            onClick={() =>
+              m.mutate(
+                {
+                  ...v,
+                  rateCardIds: v.rateCardIds?.length ? v.rateCardIds : undefined,
+                  restrictions: v.restrictions?.length ? v.restrictions : undefined,
+                  additionalServiceIds: v.additionalServiceIds?.length ? v.additionalServiceIds : undefined,
+                  carbonGramsPerKgKm: v.carbonGramsPerKgKm || undefined,
+                },
+                { onSuccess: () => { toast('Enregistré'); onClose(); } },
+              )
+            }
+          >
             {m.isPending && <Spinner size={16} className="text-white" />}
             Enregistrer
           </button>
@@ -365,7 +391,50 @@ function ServiceDrawer({ state, onClose, crud }: { state: { v: CarrierService; i
             <Field label="Coût par kg (€)">
               <NumberInput value={v.costPerKg} step={0.01} onChange={(n) => set('costPerKg', n)} />
             </Field>
+            <Field label="Facteur carbone (g CO2e par kg·km)" error={fe.carbonGramsPerKgKm} hint="Utilisé quand aucune grille ne calcule le carbone">
+              <NumberInput value={v.carbonGramsPerKgKm ?? 0} step={0.1} min={0} onChange={(n) => set('carbonGramsPerKgKm', n)} invalid={!!fe.carbonGramsPerKgKm} />
+            </Field>
           </div>
+        </div>
+        <div>
+          <div className="os-title-s mb-s">Grilles tarifaires</div>
+          <p className="m-0 mb-m text-xs text-neutral-500">Grilles colis ou expédition évaluées pour chaque transport de ce service. Sans grille, le coût de base et le coût par kg s'appliquent.</p>
+          <ChipSelect
+            options={(cards.data?.items ?? [])
+              .filter((c) => c.scope !== 'ORDER')
+              .sort((a, b) => Number(b.carrierId === v.carrierId) - Number(a.carrierId === v.carrierId))
+              .map((c) => c.id)}
+            value={v.rateCardIds ?? []}
+            onChange={(x) => set('rateCardIds', x)}
+            renderLabel={(id) => {
+              const c = cards.data?.items.find((x) => x.id === id);
+              return (
+                <span title={c?.name}>
+                  {id} <span className="font-normal text-neutral-500">· {RATE_SCOPE_LABEL[c?.scope ?? ''] ?? ''}</span>
+                </span>
+              );
+            }}
+          />
+          {Object.entries(fe).filter(([k]) => k.startsWith('rateCardIds')).map(([k, msg]) => (
+            <div key={k} className="field-error">{msg}</div>
+          ))}
+        </div>
+        <div>
+          <div className="os-title-s mb-s">Restrictions articles</div>
+          <RestrictionsEditor value={v.restrictions} onChange={(x) => set('restrictions', x)} errors={fe} />
+        </div>
+        <div>
+          <div className="os-title-s mb-s">Services associés</div>
+          <p className="m-0 mb-m text-xs text-neutral-500">Proposés au client quand ce service effectue la livraison finale.</p>
+          <ChipSelect
+            options={(extras.data?.items ?? []).map((x) => x.id)}
+            value={v.additionalServiceIds ?? []}
+            onChange={(x) => set('additionalServiceIds', x)}
+            renderLabel={(id) => extras.data?.items.find((x) => x.id === id)?.name ?? id}
+          />
+          {Object.entries(fe).filter(([k]) => k.startsWith('additionalServiceIds')).map(([k, msg]) => (
+            <div key={k} className="field-error">{msg}</div>
+          ))}
         </div>
         <Switch checked={v.active} onChange={(b) => set('active', b)} label={v.active ? 'Service actif' : 'Service inactif'} />
       </div>

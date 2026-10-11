@@ -129,7 +129,7 @@ export async function request<T>(path: string, opts: RequestOptions = {}): Promi
 }
 
 export const api = {
-  get: <T>(path: string, query?: RequestOptions['query'], signal?: AbortSignal) => request<T>(path, { query, signal }),
+  get: <T>(path: string, query?: RequestOptions['query'], signal?: AbortSignal, auth?: boolean) => request<T>(path, { query, signal, auth }),
   post: <T>(path: string, body?: unknown, auth?: boolean) => request<T>(path, { method: 'POST', body, auth }),
   put: <T>(path: string, body: unknown) => request<T>(path, { method: 'PUT', body }),
   patch: <T>(path: string, body: unknown) => request<T>(path, { method: 'PATCH', body }),

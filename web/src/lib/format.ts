@@ -121,3 +121,15 @@ export function fromLocalInput(v: string): string {
   const off = parisOffset(new Date(guess.getTime() - 2 * 3600 * 1000));
   return base + off;
 }
+
+/** Emissions in kg CO2e with adaptive precision: 0,011 kg CO2e, 1,25 kg CO2e. */
+export function fmtCarbon(v: number | undefined | null): string {
+  if (v === undefined || v === null || isNaN(v)) return '–';
+  const digits = Math.abs(v) < 1 ? 3 : Math.abs(v) < 100 ? 2 : 0;
+  return `${fmtNum(v, digits)} kg CO2e`;
+}
+
+export function fmtKm(v: number | undefined | null): string {
+  if (v === undefined || v === null || isNaN(v)) return '–';
+  return `${fmtNum(v, v < 100 ? 1 : 0)} km`;
+}

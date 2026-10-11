@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react';
 import { ApiError } from '../api/client';
-import { useCarriers, useModes, useServices } from '../api/hooks';
+import { useCarriers, useModes, useRateCards, useServices } from '../api/hooks';
+import { RestrictionsEditor } from './pricing/RuleBuilder';
+import { RATE_SCOPE_LABEL } from '../lib/labels';
 import type { Leg } from '../api/types';
 import { ChipSelect, ConfirmButton, cx, Drawer, ErrorAlert, Field, ListInput, NumberInput, Spinner, Switch } from './ui';
 
@@ -42,6 +44,7 @@ export function LegDrawer({
   const carriers = useCarriers();
   const services = useServices(v?.carrierId || undefined);
   const modes = useModes();
+  const cards = useRateCards();
   useEffect(() => {
     if (state) setV({ ...state.leg, destinationZones: state.leg.destinationZones ?? [], modes: state.leg.modes ?? [] });
   }, [state]);
@@ -55,7 +58,10 @@ export function LegDrawer({
     destinationZones: v.destinationZones?.length ? v.destinationZones : undefined,
     modes: v.modes?.length ? v.modes : undefined,
     transitMinutes: v.transitMinutes || undefined,
+    rateCardIds: v.rateCardIds?.length ? v.rateCardIds : undefined,
+    restrictions: v.restrictions?.length ? v.restrictions : undefined,
   });
+  const svc = svcList.find((s) => s.id === v.serviceId);
   return (
     <Drawer
       open
@@ -142,6 +148,37 @@ export function LegDrawer({
               </Field>
             </>
           )}
+        </div>
+        <div>
+          <div className="os-title-s mb-s">Grilles tarifaires du leg</div>
+          <p className="m-0 mb-m text-xs text-neutral-500">
+            Remplacent les grilles du service pour ce segment.{' '}
+            {svc && ((svc.rateCardIds ?? []).length ? `Grilles du service : ${svc.rateCardIds!.join(', ')}.` : 'Le service n’a pas de grille : coût de base + coût par kg.')}
+          </p>
+          <ChipSelect
+            options={(cards.data?.items ?? [])
+              .filter((c) => c.scope !== 'ORDER')
+              .sort((a, b) => Number(b.carrierId === v.carrierId) - Number(a.carrierId === v.carrierId))
+              .map((c) => c.id)}
+            value={v.rateCardIds ?? []}
+            onChange={(x) => set('rateCardIds', x)}
+            renderLabel={(id) => {
+              const c = cards.data?.items.find((x) => x.id === id);
+              return (
+                <span title={c?.name}>
+                  {id} <span className="font-normal text-neutral-500">· {RATE_SCOPE_LABEL[c?.scope ?? ''] ?? ''}</span>
+                </span>
+              );
+            }}
+          />
+          {Object.entries(fe).filter(([k]) => k.startsWith('rateCardIds')).map(([k, msg]) => (
+            <div key={k} className="field-error">{msg}</div>
+          ))}
+        </div>
+        <div>
+          <div className="os-title-s mb-s">Restrictions articles du leg</div>
+          <p className="m-0 mb-m text-xs text-neutral-500">S'ajoutent aux restrictions du service.</p>
+          <RestrictionsEditor value={v.restrictions} onChange={(x) => set('restrictions', x)} errors={fe} />
         </div>
       </div>
     </Drawer>
