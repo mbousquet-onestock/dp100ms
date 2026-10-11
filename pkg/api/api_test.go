@@ -306,11 +306,11 @@ func TestPricingConfigurationEndpoints(t *testing.T) {
 func TestCarrierSchedules(t *testing.T) {
 	s := server(t)
 	rec := call(t, s, "POST", "/api/v1/carriers/COLIVIA/schedule-preview", `{"serviceId":"COLIVIA-STD","postalCode":"20000","readyAt":"2026-10-12T15:00:00+02:00"}`, false)
-	if rec.Code != 200 || !strings.Contains(rec.Body.String(), "COLIVIA-CORSE") || !strings.Contains(rec.Body.String(), `"transitDays":4`) || !strings.Contains(rec.Body.String(), "RC-COLIVIA-CORSE") {
+	if rec.Code != 200 || !strings.Contains(rec.Body.String(), "COLIVIA-CORSE") || !strings.Contains(rec.Body.String(), `"routeId":"COLIVIA-STD-FR-CORSE"`) || !strings.Contains(rec.Body.String(), `"transitMaxHours":96`) || !strings.Contains(rec.Body.String(), "ROUTE:COLIVIA-STD-FR-CORSE") {
 		t.Fatalf("corsica preview: %d %s", rec.Code, rec.Body)
 	}
 	rec = call(t, s, "POST", "/api/v1/carriers/COLIVIA/schedule-preview", `{"serviceId":"COLIVIA-STD","postalCode":"33000","readyAt":"2026-10-12T15:00:00+02:00"}`, false)
-	if !strings.Contains(rec.Body.String(), `"transitDays":2`) || !strings.Contains(rec.Body.String(), "RC-COLIVIA-STD") {
+	if !strings.Contains(rec.Body.String(), `"routeId":"COLIVIA-STD-FR-FR"`) || !strings.Contains(rec.Body.String(), "ROUTE:COLIVIA-STD-FR-FR") {
 		t.Fatalf("national preview: %s", rec.Body)
 	}
 	car := call(t, s, "GET", "/api/v1/carriers/COLIVIA", "", false).Body.String()
@@ -319,5 +319,34 @@ func TestCarrierSchedules(t *testing.T) {
 	rec = call(t, s, "PUT", "/api/v1/carriers/COLIVIA", bad, true)
 	if rec.Code != 422 || !strings.Contains(rec.Body.String(), "not a service of carrier COLIVIA") {
 		t.Fatalf("schedule validation: %d %s", rec.Code, rec.Body)
+	}
+}
+
+func TestZonesAndCarrierRoutes(t *testing.T) {
+	s := server(t)
+	if rec := call(t, s, "GET", "/api/v1/carrier-routes?carrierId=COLIVIA&serviceId=COLIVIA-STD", "", false); rec.Code != 200 || !strings.Contains(rec.Body.String(), `"total":3`) {
+		t.Fatalf("list routes: %d %s", rec.Code, rec.Body)
+	}
+	if rec := call(t, s, "POST", "/api/v1/zones", `{"id":"BZH","name":"Bretagne","departments":["22","29","35","56"],"active":true}`, true); rec.Code != 201 {
+		t.Fatalf("create zone: %d %s", rec.Code, rec.Body)
+	}
+	route := `{"id":"COL-BZH","carrierId":"COLIVIA","serviceId":"COLIVIA-STD","originZoneId":"FR","destinationZoneId":"BZH",
+		"costs":{"rows":[{"conditions":{"weightKg":{"max":30}},"outputs":{"cost":{"fixed":20},"carbonKg":{"fixed":0.12}}}]},
+		"transitMinHours":12,"transitMaxHours":12,"priority":1,"active":true,
+		"planning":{"timezone":"Europe/Paris","days":[{"weekday":1,"pickups":["12:00","18:00"],"deliveryStart":"05:00","deliveryEnd":"22:00"},{"weekday":2,"deliveryStart":"05:00","deliveryEnd":"22:00"}]},
+		"metadata":{"codeProduit":"BZH"}}`
+	if rec := call(t, s, "POST", "/api/v1/carrier-routes", route, true); rec.Code != 201 {
+		t.Fatalf("create route: %d %s", rec.Code, rec.Body)
+	}
+	rec := call(t, s, "POST", "/api/v1/carriers/COLIVIA/schedule-preview", `{"serviceId":"COLIVIA-STD","postalCode":"29200","readyAt":"2026-10-12T08:00:00+02:00"}`, false)
+	if !strings.Contains(rec.Body.String(), `"routeId":"COL-BZH"`) || !strings.Contains(rec.Body.String(), `"delivery":{"from":"2026-10-13T05:00:00+02:00"`) {
+		t.Fatalf("route preview: %s", rec.Body)
+	}
+	bad := strings.NewReplacer(`"serviceId":"COLIVIA-STD"`, `"serviceId":"EXPRESSO-EXP"`, `"transitMinHours":12`, `"transitMinHours":20`, `"weekday":2`, `"weekday":9`, `"destinationZoneId":"BZH"`, `"destinationZoneId":"NOPE"`).Replace(route)
+	rec = call(t, s, "PUT", "/api/v1/carrier-routes/COL-BZH", bad, true)
+	for _, f := range []string{"serviceId", "transitMaxHours", "planning.days[1].weekday", "destinationZoneId"} {
+		if rec.Code != 422 || !strings.Contains(rec.Body.String(), `"`+f+`"`) {
+			t.Fatalf("route validation (%s): %d %s", f, rec.Code, rec.Body)
+		}
 	}
 }

@@ -199,6 +199,9 @@ type SchedulePreviewRequest struct {
 	ServiceID  string    `json:"serviceId"`
 	PostalCode string    `json:"postalCode"`
 	ReadyAt    time.Time `json:"readyAt"`
+	// OriginID optionally picks the leg leaving this stock point or hub
+	// (carrier routes depend on the origin zone).
+	OriginID string `json:"originId,omitempty"`
 }
 
 // schedulePreview shows the effective planning of a carrier service for a
@@ -225,7 +228,10 @@ func (s *Server) schedulePreview(w http.ResponseWriter, r *http.Request) {
 	// a final leg of the service, or any leg of it
 	var leg *network.Leg
 	for _, l := range net.Legs {
-		if l.ServiceID == q.ServiceID && l.CarrierID == carrierID && (leg == nil || (l.Final && !leg.Final)) {
+		if l.ServiceID != q.ServiceID || l.CarrierID != carrierID || (q.OriginID != "" && l.From != q.OriginID) {
+			continue
+		}
+		if leg == nil || (l.Final && !leg.Final) {
 			leg = l
 		}
 	}
@@ -244,17 +250,16 @@ func (s *Server) schedulePreview(w http.ResponseWriter, r *http.Request) {
 		"deliveryDays": plan.DeliveryDays, "transitDays": plan.TransitDays,
 		"windowStart": plan.WindowStart, "windowEnd": plan.WindowEnd, "rateCardIds": nz(plan.CardIDs),
 	}
-	dep, ok := clk.NextDeparture(plan.PickupCal, q.ReadyAt.Unix(), plan.Departures, plan.CutoffBefore)
-	if ok {
+	if plan.RouteID != "" {
+		out["routeId"] = plan.RouteID
+		out["transitMinHours"] = plan.TransitMinSec / 3600
+		out["transitMaxHours"] = plan.TransitMaxSec / 3600
+	}
+	if dep, ok := plan.NextDeparture(clk, q.ReadyAt.Unix()); ok {
 		out["departure"] = clk.Time(dep)
 		if leg.Final {
-			day, _ := clk.Split(dep)
-			if dd, ok := clk.AddWorkingDays(plan.DeliveryCal, day, plan.TransitDays); ok {
-				wEnd := plan.WindowEnd
-				if wEnd == 0 {
-					wEnd = 24*60 - 1
-				}
-				out["delivery"] = model.TimeWindow{From: clk.Time(clk.At(dd, plan.WindowStart)), To: clk.Time(clk.At(dd, wEnd))}
+			if from, to, ok := plan.Delivery(clk, dep, int64(leg.Transit.Seconds())); ok {
+				out["delivery"] = model.TimeWindow{From: clk.Time(from), To: clk.Time(to)}
 			}
 		}
 	}

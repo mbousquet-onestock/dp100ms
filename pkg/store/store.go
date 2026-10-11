@@ -191,6 +191,8 @@ type Store struct {
 	RateCards          *Collection[model.RateCard]
 	AdditionalServices *Collection[model.AdditionalService]
 	StockViews         *Collection[model.StockView]
+	Zones              *Collection[model.Zone]
+	CarrierRoutes      *Collection[model.CarrierRoute]
 
 	settingsMu sync.RWMutex
 	settings   model.EngineSettings
@@ -212,6 +214,8 @@ func New() *Store {
 	s.RateCards = newCollection(s, "rate_card", func(v *model.RateCard) string { return v.ID })
 	s.AdditionalServices = newCollection(s, "additional_service", func(v *model.AdditionalService) string { return v.ID })
 	s.StockViews = newCollection(s, "stock_view", func(v *model.StockView) string { return v.ID })
+	s.Zones = newCollection(s, "zone", func(v *model.Zone) string { return v.ID })
+	s.CarrierRoutes = newCollection(s, "carrier_route", func(v *model.CarrierRoute) string { return v.ID })
 	return s
 }
 
@@ -346,6 +350,8 @@ type Counts struct {
 	RateCards          int            `json:"rateCards"`
 	AdditionalServices int            `json:"additionalServices"`
 	StockViews         int            `json:"stockViews"`
+	Zones              int            `json:"zones"`
+	CarrierRoutes      int            `json:"carrierRoutes"`
 	ConfigVersion      uint64         `json:"configVersion"`
 	StockVersion       uint64         `json:"stockVersion"`
 }
@@ -354,7 +360,7 @@ func (s *Store) Counts() Counts {
 	c := Counts{
 		StockPoints: s.StockPoints.Len(), Carriers: s.Carriers.Len(), Services: s.Services.Len(),
 		Hubs: s.Hubs.Len(), Legs: s.Legs.Len(), Routes: s.Routes.Len(), DeliveryModes: s.Modes.Len(),
-		Scenarios: s.Scenarios.Len(), RateCards: s.RateCards.Len(), AdditionalServices: s.AdditionalServices.Len(), StockViews: s.StockViews.Len(), ConfigVersion: s.ConfigVersion(), StockPointsByType: map[string]int{},
+		Scenarios: s.Scenarios.Len(), RateCards: s.RateCards.Len(), AdditionalServices: s.AdditionalServices.Len(), StockViews: s.StockViews.Len(), Zones: s.Zones.Len(), CarrierRoutes: s.CarrierRoutes.Len(), ConfigVersion: s.ConfigVersion(), StockPointsByType: map[string]int{},
 	}
 	for _, p := range s.StockPoints.All() {
 		c.StockPointsByType[string(p.Type)]++

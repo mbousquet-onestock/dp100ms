@@ -262,6 +262,7 @@ func generatePricing(s *store.Store) {
 		}
 	}
 	generateCarrierPlanning(s)
+	generateRoutes(s)
 	// delivery modes: criteria, stock views, customer prices
 	modeSetup := map[string]func(*model.DeliveryMode){
 		"STANDARD": func(m *model.DeliveryMode) {
@@ -348,4 +349,91 @@ func generateCarrierPlanning(s *store.Store) {
 			s.Carriers.LoadRaw(c)
 		}
 	}
+}
+
+// generateRoutes creates the zones and the carrier routes: origin zone ->
+// destination zone per service with a cost grid, a transit in hours, a
+// weekly planning (pickups, delivery slots) and metadata.
+func generateRoutes(s *store.Store) {
+	zones := []model.Zone{
+		{ID: "FR", Name: "France métropolitaine", Departments: []string{"*"}, Active: true},
+		{ID: "CORSE", Name: "Corse", Departments: []string{"20"}, Active: true},
+		{ID: "MONTAGNE", Name: "Zones de montagne", Description: "Alpes du Sud, Cantal, Lozère, Savoie", Departments: []string{"04", "05", "15", "48", "73"}, Active: true},
+		{ID: "ELOIGNE", Name: "Départements éloignés", Departments: []string{"29", "64", "65", "66", "09"}, Active: true},
+		{ID: "IDF", Name: "Île-de-France", Departments: []string{"75", "77", "78", "91", "92", "93", "94", "95"}, Active: true},
+		{ID: "GRANDES-VILLES", Name: "Grandes agglomérations", Description: "Paris, Lyon, Marseille, Bordeaux, Lille, Toulouse, Nantes, Strasbourg, Nice, Rennes",
+			Departments: []string{"75", "92", "93", "94", "69", "13", "33", "59", "31", "44", "67", "06", "35"}, Active: true},
+	}
+	for _, z := range zones {
+		s.Zones.LoadRaw(z)
+	}
+	grid := func(id string) *model.RateCard {
+		rc, ok := s.RateCards.Get(id)
+		if !ok {
+			return nil
+		}
+		rc.ID, rc.Name, rc.CarrierID, rc.Description = "", "", "", ""
+		return &rc
+	}
+	week := func(pickupDays, deliveryDays []int, start, end string, pickups ...string) *model.RoutePlanning {
+		pl := &model.RoutePlanning{Timezone: "Europe/Paris", HonorHolidays: true}
+		for wd := 1; wd <= 7; wd++ {
+			d := model.RouteDay{Weekday: wd}
+			if hasInt(pickupDays, wd) {
+				for _, p := range pickups {
+					d.Pickups = append(d.Pickups, model.MustTOD(p))
+				}
+			}
+			if hasInt(deliveryDays, wd) {
+				d.DeliveryStart, d.DeliveryEnd = tp(start), tp(end)
+			}
+			if len(d.Pickups) > 0 || d.DeliveryStart != nil {
+				pl.Days = append(pl.Days, d)
+			}
+		}
+		return pl
+	}
+	monFri, monSat, tueSat := []int{1, 2, 3, 4, 5}, []int{1, 2, 3, 4, 5, 6}, []int{2, 3, 4, 5, 6}
+	routes := []model.CarrierRoute{
+		{ID: "COLIVIA-STD-FR-FR", Name: "Domicile national", CarrierID: "COLIVIA", ServiceID: "COLIVIA-STD", OriginZoneID: "FR", DestinationZoneID: "FR",
+			Costs: grid("RC-COLIVIA-STD"), TransitMinHours: 24, TransitMaxHours: 48, Planning: week(monFri, monSat, "09:00", "18:00", "12:00", "19:00"),
+			Metadata: map[string]string{"codeProduit": "DOM", "contrat": "COL-2026-01"}, Active: true},
+		{ID: "COLIVIA-STD-FR-CORSE", Name: "Domicile Corse", CarrierID: "COLIVIA", ServiceID: "COLIVIA-STD", OriginZoneID: "FR", DestinationZoneID: "CORSE",
+			Costs: grid("RC-COLIVIA-CORSE"), TransitMinHours: 72, TransitMaxHours: 96, Planning: week(monFri, monFri, "09:00", "18:00", "12:00"),
+			Metadata: map[string]string{"codeProduit": "DOM-CO", "traversee": "maritime"}, Active: true},
+		{ID: "COLIVIA-STD-FR-MONTAGNE", Name: "Domicile zones de montagne", CarrierID: "COLIVIA", ServiceID: "COLIVIA-STD", OriginZoneID: "FR", DestinationZoneID: "MONTAGNE",
+			Costs: grid("RC-COLIVIA-STD"), TransitMinHours: 48, TransitMaxHours: 72, Planning: week(monFri, monSat, "10:00", "17:00", "12:00", "19:00"),
+			Metadata: map[string]string{"codeProduit": "DOM-MT"}, Active: true},
+		{ID: "COLIVIA-REG-FR-FR", Name: "Régional J+1", CarrierID: "COLIVIA", ServiceID: "COLIVIA-REG", OriginZoneID: "FR", DestinationZoneID: "FR",
+			Costs: grid("RC-COLIVIA-REG"), TransitMinHours: 12, TransitMaxHours: 24, Planning: week(monSat, monSat, "08:00", "20:00", "18:00"),
+			Metadata: map[string]string{"codeProduit": "REG"}, Active: true},
+		{ID: "EXPRESSO-EXP-FR-FR", Name: "Express avant 13h", CarrierID: "EXPRESSO", ServiceID: "EXPRESSO-EXP", OriginZoneID: "FR", DestinationZoneID: "FR",
+			Costs: grid("RC-EXPRESSO"), TransitMinHours: 12, TransitMaxHours: 18, Planning: week(monFri, monFri, "08:00", "13:00", "19:00"),
+			Metadata: map[string]string{"codeProduit": "E13"}, Active: true},
+		{ID: "EXPRESSO-EXP-FR-ELOIGNE", Name: "Express départements éloignés", CarrierID: "EXPRESSO", ServiceID: "EXPRESSO-EXP", OriginZoneID: "FR", DestinationZoneID: "ELOIGNE",
+			Costs: grid("RC-EXPRESSO"), TransitMinHours: 18, TransitMaxHours: 24, Planning: week(monFri, monFri, "13:00", "18:00", "19:00"),
+			Metadata: map[string]string{"codeProduit": "E18"}, Active: true},
+		{ID: "RELAIS-STD-FR-FR", Name: "Point relais 48h", CarrierID: "RELAISPLUS", ServiceID: "RELAIS-STD", OriginZoneID: "FR", DestinationZoneID: "FR",
+			Costs: grid("RC-RELAIS"), TransitMinHours: 36, TransitMaxHours: 48, Planning: week(monFri, tueSat, "10:00", "19:00", "18:30"),
+			Metadata: map[string]string{"codeProduit": "PR48", "reseau": "Relais Plus"}, Active: true},
+		{ID: "URBIKE-AM-VILLES", Name: "Tournée matin grandes villes", CarrierID: "URBIKE", ServiceID: "URBIKE-AM", OriginZoneID: "GRANDES-VILLES", DestinationZoneID: "GRANDES-VILLES",
+			Costs: grid("RC-URBIKE"), Metadata: map[string]string{"vehicule": "vélo-cargo"}, Active: true},
+		{ID: "TRANSALP-LH-FR-FR", Name: "Traction de nuit", CarrierID: "TRANSALP", ServiceID: "TRANSALP-LH", OriginZoneID: "FR", DestinationZoneID: "FR",
+			Costs: grid("RC-TRANSALP"), Metadata: map[string]string{"vehicule": "semi-remorque"}, Active: true},
+	}
+	for _, r := range routes {
+		if r.Costs == nil {
+			continue
+		}
+		s.CarrierRoutes.LoadRaw(r)
+	}
+}
+
+func hasInt(xs []int, x int) bool {
+	for _, v := range xs {
+		if v == x {
+			return true
+		}
+	}
+	return false
 }

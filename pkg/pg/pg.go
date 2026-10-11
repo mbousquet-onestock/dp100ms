@@ -38,6 +38,8 @@ var tables = map[string]string{
 	"rate_card":          "rate_cards",
 	"additional_service": "additional_services",
 	"stock_view":         "stock_views",
+	"zone":               "zones",
+	"carrier_route":      "carrier_routes",
 }
 
 // DB implements store.Persister.
@@ -209,7 +211,7 @@ const (
 )
 
 var entityTables = []string{"stock_points", "carriers", "carrier_services", "hubs", "legs", "routes", "delivery_modes",
-	"scenarios", "rate_cards", "additional_services", "stock_views"}
+	"scenarios", "rate_cards", "additional_services", "stock_views", "zones", "carrier_routes"}
 
 func docRows[T any](items []T, id func(T) string) ([][]any, error) {
 	rows := make([][]any, 0, len(items))
@@ -290,6 +292,14 @@ func (d *DB) SaveAll(ctx context.Context, s *store.Store, cfg any, stockMode str
 			r, e := docRows(s.StockViews.All(), func(v model.StockView) string { return v.ID })
 			return copyDocs("stock_views", r, e)
 		},
+		func() error {
+			r, e := docRows(s.Zones.All(), func(v model.Zone) string { return v.ID })
+			return copyDocs("zones", r, e)
+		},
+		func() error {
+			r, e := docRows(s.CarrierRoutes.All(), func(v model.CarrierRoute) string { return v.ID })
+			return copyDocs("carrier_routes", r, e)
+		},
 	}
 	for _, step := range steps {
 		if err := step(); err != nil {
@@ -354,6 +364,7 @@ func (d *DB) LoadAll(ctx context.Context, baseline func(s *store.Store, seed int
 		{"stock_points", s.StockPoints.LoadJSON}, {"hubs", s.Hubs.LoadJSON}, {"legs", s.Legs.LoadJSON},
 		{"routes", s.Routes.LoadJSON}, {"scenarios", s.Scenarios.LoadJSON}, {"rate_cards", s.RateCards.LoadJSON},
 		{"additional_services", s.AdditionalServices.LoadJSON}, {"stock_views", s.StockViews.LoadJSON},
+		{"zones", s.Zones.LoadJSON}, {"carrier_routes", s.CarrierRoutes.LoadJSON},
 	}
 	for _, l := range loaders {
 		rows, err := d.Pool.Query(ctx, `SELECT data FROM `+l.table+` ORDER BY id`)

@@ -25,6 +25,15 @@ type LegPlan struct {
 	WindowEnd    model.TimeOfDay
 	Cards        []*pricing.Card
 	CardIDs      []string
+	// carrier route applied last (empty = none)
+	RouteID string
+	// Weekly replaces Departures and the window per weekday (route planning).
+	Weekly *Weekly
+	// TransitMinSec / TransitMaxSec > 0: transit in elapsed time (route).
+	TransitMinSec int64
+	TransitMaxSec int64
+	// Restrictions of the leg for this destination (nil = Leg.Restrictions).
+	Restrictions []model.Restriction
 }
 
 // Plan returns the planning of a leg for a destination department.
@@ -104,6 +113,9 @@ func (n *Network) attachSchedules(carriers map[string]*model.Carrier) {
 			}
 			l.byDept[d] = n.buildPlan(l, car, layers)
 		}
+	}
+	for _, l := range n.Legs {
+		n.attachRoutes(l)
 	}
 }
 

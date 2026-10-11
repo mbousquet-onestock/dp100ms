@@ -44,6 +44,7 @@ type Node struct {
 	Kind       NodeKind
 	Lat, Lon   float64
 	StockPoint *model.StockPoint
+	PostalCode string
 	PrepCal    *calendar.Cal
 	Hub        *Hub
 	modes      map[string]bool
@@ -165,6 +166,9 @@ type Network struct {
 	ModePriceCards    map[string][]*pricing.Card
 	AddServices       map[string]*model.AdditionalService
 	StockViews        map[string]*StockView
+	Zones             map[string]*Zone
+	RouteByID         map[string]*Route
+	routesBySvc       map[string][]*Route
 
 	// HubInbound[hub][origin] lists paths origin -> hub (<= 2 legs).
 	HubInbound map[string]map[string][]*Path
@@ -235,7 +239,7 @@ func Compile(s *store.Store) *Network {
 		case model.StockPointLastMileHub:
 			kind = NodeLastMile
 		}
-		n.Nodes[sp.ID] = &Node{ID: sp.ID, Name: sp.Name, Kind: kind, Lat: sp.Lat, Lon: sp.Lon, StockPoint: &sp,
+		n.Nodes[sp.ID] = &Node{ID: sp.ID, Name: sp.Name, Kind: kind, Lat: sp.Lat, Lon: sp.Lon, StockPoint: &sp, PostalCode: sp.Address.PostalCode,
 			PrepCal: calendar.Compile(sp.PrepCalendar), modes: setOf(sp.AllowedModes)}
 	}
 	for _, h := range s.Hubs.All() {
@@ -255,7 +259,7 @@ func Compile(s *store.Store) *Network {
 				n.Nodes[h.ID] = node
 			}
 		} else {
-			n.Nodes[h.ID] = &Node{ID: h.ID, Name: h.Name, Kind: NodeHub, Lat: h.Lat, Lon: h.Lon, Hub: ch}
+			n.Nodes[h.ID] = &Node{ID: h.ID, Name: h.Name, Kind: NodeHub, Lat: h.Lat, Lon: h.Lon, Hub: ch, PostalCode: h.PostalCode}
 		}
 		if h.ConsolidationEnabled {
 			if node := n.Nodes[h.ID]; node != nil {
@@ -347,6 +351,7 @@ func Compile(s *store.Store) *Network {
 		}
 	}
 	n.attachPricing(s)
+	n.attachZonesAndRoutes(s)
 	n.attachSchedules(n.Carriers)
 	for _, r := range s.Routes.All() {
 		if r.Active {

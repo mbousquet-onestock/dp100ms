@@ -54,7 +54,11 @@ func (c *reqCtx) setView(mode string) {
 
 // legMask returns the bitmask of basket items a leg may carry (cached).
 func (c *reqCtx) legMask(l *network.Leg) uint64 {
-	if len(l.Restrictions) == 0 {
+	rs := l.Restrictions
+	if pr := l.Plan(c.dept).Restrictions; pr != nil {
+		rs = pr
+	}
+	if len(rs) == 0 {
 		return math.MaxUint64
 	}
 	if c.legMasks == nil {
@@ -65,7 +69,7 @@ func (c *reqCtx) legMask(l *network.Leg) uint64 {
 	}
 	var m uint64
 	for i := range c.items {
-		if pricing.Allows(l.Restrictions, c.items[i].sku) {
+		if pricing.Allows(rs, c.items[i].sku) {
 			m |= 1 << uint(i)
 		}
 	}

@@ -3,6 +3,7 @@ package api
 import (
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/onestock/dp100ms/pkg/model"
 	"github.com/onestock/dp100ms/pkg/pricing"
@@ -178,6 +179,7 @@ func checkDays(field string, days []int) []fe {
 // validateCarrierPlanning checks the default grids and the schedules.
 func validateCarrierPlanning(st *store.Store, v *model.Carrier) []fe {
 	errs := checkCards(st, "rateCardIds", v.RateCardIDs, false)
+	errs = append(errs, validateRestrictions("restrictions", v.Restrictions)...)
 	seen := map[string]bool{}
 	for i := range v.Schedules {
 		sc := &v.Schedules[i]
@@ -218,5 +220,105 @@ func validateCarrierPlanning(st *store.Store, v *model.Carrier) []fe {
 		}
 		errs = append(errs, checkCards(st, p+".rateCardIds", sc.RateCardIDs, false)...)
 	}
+	return errs
+}
+
+func validateZone(st *store.Store, v *model.Zone) []fe {
+	errs := checkID(v.ID)
+	if v.Name == "" {
+		errs = append(errs, fe{Field: "name", Message: "required"})
+	}
+	if len(v.Departments)+len(v.PostalCodes)+len(v.StockPointIDs) == 0 {
+		errs = append(errs, fe{Field: "departments", Message: "a zone needs departments, postal codes or stock points"})
+	}
+	for i, d := range v.Departments {
+		if d != "*" && (len(d) < 2 || len(d) > 3) {
+			errs = append(errs, fe{Field: fmt.Sprintf("departments[%d]", i), Message: "department code (e.g. 33, 2A, 974) or *"})
+		}
+	}
+	for i, p := range v.PostalCodes {
+		if len(p) < 2 || len(p) > 5 {
+			errs = append(errs, fe{Field: fmt.Sprintf("postalCodes[%d]", i), Message: "postal code or prefix of 2 to 5 characters"})
+		}
+	}
+	for i, id := range v.StockPointIDs {
+		_, sp := st.StockPoints.Get(id)
+		_, hub := st.Hubs.Get(id)
+		if !sp && !hub {
+			errs = append(errs, fe{Field: fmt.Sprintf("stockPointIds[%d]", i), Message: "unknown stock point or hub " + id})
+		}
+	}
+	return errs
+}
+
+func validateCarrierRoute(st *store.Store, v *model.CarrierRoute) []fe {
+	errs := checkID(v.ID)
+	if _, ok := st.Carriers.Get(v.CarrierID); !ok {
+		errs = append(errs, fe{Field: "carrierId", Message: "unknown carrier"})
+	}
+	if svc, ok := st.Services.Get(v.ServiceID); !ok {
+		errs = append(errs, fe{Field: "serviceId", Message: "unknown service"})
+	} else if svc.CarrierID != v.CarrierID {
+		errs = append(errs, fe{Field: "serviceId", Message: "service of another carrier"})
+	}
+	if _, ok := st.Zones.Get(v.OriginZoneID); !ok {
+		errs = append(errs, fe{Field: "originZoneId", Message: "unknown zone"})
+	}
+	if _, ok := st.Zones.Get(v.DestinationZoneID); !ok {
+		errs = append(errs, fe{Field: "destinationZoneId", Message: "unknown zone"})
+	}
+	if v.TransitMinHours < 0 || v.TransitMaxHours < 0 {
+		errs = append(errs, fe{Field: "transitMinHours", Message: "must be >= 0"})
+	}
+	if v.TransitMaxHours < v.TransitMinHours {
+		errs = append(errs, fe{Field: "transitMaxHours", Message: "must be >= transitMinHours"})
+	}
+	if v.Costs != nil {
+		rc := *v.Costs
+		rc.ID = "route"
+		if rc.Scope == "" {
+			v.Costs.Scope = model.ScopeParcel
+			rc.Scope = model.ScopeParcel
+		}
+		if v.Costs.Currency == "" {
+			v.Costs.Currency = "EUR"
+		}
+		if rc.NoMatch != "" && rc.NoMatch != "REJECT" && rc.NoMatch != "ZERO" {
+			errs = append(errs, fe{Field: "costs.noMatch", Message: "REJECT or ZERO"})
+		}
+		v.Costs.Active = true
+		_, msgs := pricing.Compile(&rc, pricing.NewRegistry())
+		errs = append(errs, asFE("costs", msgs)...)
+	}
+	if pl := v.Planning; pl != nil {
+		tz := st.Settings().Timezone
+		if tz == "" {
+			tz = "Europe/Paris"
+		}
+		if pl.Timezone != "" && pl.Timezone != tz {
+			errs = append(errs, fe{Field: "planning.timezone", Message: "only the deployment time zone is supported"})
+		}
+		seen := map[int]bool{}
+		for i, d := range pl.Days {
+			p := fmt.Sprintf("planning.days[%d]", i)
+			if d.Weekday < 1 || d.Weekday > 7 {
+				errs = append(errs, fe{Field: p + ".weekday", Message: "1 (Monday) to 7 (Sunday)"})
+			} else if seen[d.Weekday] {
+				errs = append(errs, fe{Field: p + ".weekday", Message: "duplicate day"})
+			}
+			seen[d.Weekday] = true
+			if (d.DeliveryStart == nil) != (d.DeliveryEnd == nil) {
+				errs = append(errs, fe{Field: p + ".deliveryEnd", Message: "set both slot bounds or none"})
+			} else if d.DeliveryStart != nil && *d.DeliveryEnd <= *d.DeliveryStart {
+				errs = append(errs, fe{Field: p + ".deliveryEnd", Message: "must be after deliveryStart"})
+			}
+		}
+		for i, s := range pl.ClosedDates {
+			if _, err := time.Parse("2006-01-02", s); err != nil {
+				errs = append(errs, fe{Field: fmt.Sprintf("planning.closedDates[%d]", i), Message: "YYYY-MM-DD"})
+			}
+		}
+	}
+	errs = append(errs, validateRestrictions("restrictions", v.Restrictions)...)
 	return errs
 }

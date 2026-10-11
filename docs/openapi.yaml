@@ -700,6 +700,7 @@ paths:
                 serviceId: { type: string, example: COLIVIA-STD }
                 postalCode: { type: string, example: '20000' }
                 readyAt: { type: string, format: date-time, example: '2026-10-12T15:00:00+02:00' }
+                originId: { type: string, description: Optional stock point or hub the leg leaves from (carrier routes depend on the origin zone). }
       responses:
         '200':
           description: Planning applied.
@@ -719,10 +720,109 @@ paths:
                   windowStart: { $ref: '#/components/schemas/TimeOfDay' }
                   windowEnd: { $ref: '#/components/schemas/TimeOfDay' }
                   rateCardIds: { type: array, items: { type: string } }
+                  routeId: { type: string, description: Carrier route applied (last layer). }
+                  transitMinHours: { type: integer }
+                  transitMaxHours: { type: integer }
                   departure: { type: string, format: date-time }
                   delivery: { $ref: '#/components/schemas/TimeWindow' }
         '404': { $ref: '#/components/responses/NotFound' }
         '422': { $ref: '#/components/responses/ValidationError' }
+  /zones:
+    get:
+      tags: [Carriers]
+      operationId: listZones
+      summary: List zones
+      parameters: [{ $ref: '#/components/parameters/page' }, { $ref: '#/components/parameters/pageSize' }, { $ref: '#/components/parameters/q' }]
+      responses:
+        '200': { description: Zones., content: { application/json: { schema: { $ref: '#/components/schemas/ZonePage' } } } }
+    post:
+      tags: [Carriers]
+      operationId: createZone
+      summary: Create a zone
+      security: [{ bearerAuth: [] }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/Zone' } } } }
+      responses:
+        '201': { description: Created., content: { application/json: { schema: { $ref: '#/components/schemas/Zone' } } } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+  /zones/{id}:
+    parameters: [{ $ref: '#/components/parameters/id' }]
+    get:
+      tags: [Carriers]
+      operationId: getZone
+      summary: Get a zone
+      responses:
+        '200': { description: Zone., content: { application/json: { schema: { $ref: '#/components/schemas/Zone' } } } }
+        '404': { $ref: '#/components/responses/NotFound' }
+    put:
+      tags: [Carriers]
+      operationId: updateZone
+      summary: Replace a zone
+      security: [{ bearerAuth: [] }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/Zone' } } } }
+      responses:
+        '200': { description: Updated., content: { application/json: { schema: { $ref: '#/components/schemas/Zone' } } } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+    delete:
+      tags: [Carriers]
+      operationId: deleteZone
+      summary: Delete a zone
+      security: [{ bearerAuth: [] }]
+      responses:
+        '204': { description: Deleted. }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /carrier-routes:
+    get:
+      tags: [Carriers]
+      operationId: listCarrierRoutes
+      summary: List carrier routes
+      parameters: [{ $ref: '#/components/parameters/page' }, { $ref: '#/components/parameters/pageSize' }, { $ref: '#/components/parameters/q' }, { name: carrierId, in: query, schema: { type: string } }, { name: serviceId, in: query, schema: { type: string } }, { name: originZoneId, in: query, schema: { type: string } }, { name: destinationZoneId, in: query, schema: { type: string } }]
+      responses:
+        '200': { description: Carrier routes., content: { application/json: { schema: { $ref: '#/components/schemas/CarrierRoutePage' } } } }
+    post:
+      tags: [Carriers]
+      operationId: createCarrierRoute
+      summary: Create a carrier route
+      security: [{ bearerAuth: [] }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/CarrierRoute' } } } }
+      responses:
+        '201': { description: Created., content: { application/json: { schema: { $ref: '#/components/schemas/CarrierRoute' } } } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+  /carrier-routes/{id}:
+    parameters: [{ $ref: '#/components/parameters/id' }]
+    get:
+      tags: [Carriers]
+      operationId: getCarrierRoute
+      summary: Get a carrier route
+      responses:
+        '200': { description: Carrier route., content: { application/json: { schema: { $ref: '#/components/schemas/CarrierRoute' } } } }
+        '404': { $ref: '#/components/responses/NotFound' }
+    put:
+      tags: [Carriers]
+      operationId: updateCarrierRoute
+      summary: Replace a carrier route
+      security: [{ bearerAuth: [] }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/CarrierRoute' } } } }
+      responses:
+        '200': { description: Updated., content: { application/json: { schema: { $ref: '#/components/schemas/CarrierRoute' } } } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+    delete:
+      tags: [Carriers]
+      operationId: deleteCarrierRoute
+      summary: Delete a carrier route
+      security: [{ bearerAuth: [] }]
+      responses:
+        '204': { description: Deleted. }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
   /services:
     get:
       tags: [Carriers]
@@ -1357,6 +1457,62 @@ components:
         active: { type: boolean }
         rateCardIds: { type: array, items: { type: string }, description: 'Default cost grids of every service of the carrier (priority: leg > schedule > service > carrier).' }
         schedules: { type: array, items: { $ref: '#/components/schemas/DeliverySchedule' } }
+        restrictions: { type: array, items: { $ref: '#/components/schemas/Restriction' }, description: Article restrictions applied to every service and route of the carrier. }
+        logoUrl: { type: string }
+    Zone:
+      type: object
+      required: [id, name]
+      description: Named set of places used as origin or destination of carrier routes. A place belongs to the zone when it matches any department ("*" = metropolitan France), postal code prefix or stock point.
+      properties:
+        id: { type: string, example: FR }
+        name: { type: string, example: France métropolitaine }
+        description: { type: string }
+        departments: { type: array, items: { type: string }, example: ['*'] }
+        postalCodes: { type: array, items: { type: string }, example: ['750', '69001'] }
+        stockPointIds: { type: array, items: { type: string } }
+        active: { type: boolean }
+    ZonePage: { $ref: '#/components/schemas/_Page', x-items: Zone }
+    RouteDay:
+      type: object
+      required: [weekday]
+      properties:
+        weekday: { type: integer, minimum: 1, maximum: 7, description: 1 = Monday … 7 = Sunday. }
+        pickups: { type: array, items: { $ref: '#/components/schemas/TimeOfDay' }, description: Pickup times at the origin (none = no pickup that day). }
+        deliveryStart: { $ref: '#/components/schemas/TimeOfDay' }
+        deliveryEnd: { $ref: '#/components/schemas/TimeOfDay' }
+    RoutePlanning:
+      type: object
+      required: [days]
+      properties:
+        timezone: { type: string, example: Europe/Paris, description: Only the deployment time zone is supported. }
+        days: { type: array, items: { $ref: '#/components/schemas/RouteDay' } }
+        honorHolidays: { type: boolean }
+        closedDates: { type: array, items: { type: string, format: date } }
+    CarrierRoute:
+      type: object
+      required: [id, carrierId, serviceId, originZoneId, destinationZoneId]
+      description: |
+        Delivery route of a carrier service from an origin zone to a destination zone: cost grid (transport cost,
+        shipping fees, carbon, custom outputs), transit time in hours, weekly planning (pickups and delivery slots),
+        article restrictions and metadata. A route is the last layer of a leg planning (after the carrier schedules).
+        When several routes match, the highest priority wins, then the destination zone naming the department, then
+        the smallest zone.
+      properties:
+        id: { type: string, example: FEDEX-STD-FR-FR }
+        carrierId: { type: string }
+        serviceId: { type: string }
+        name: { type: string }
+        originZoneId: { type: string }
+        destinationZoneId: { type: string }
+        costs: { $ref: '#/components/schemas/RateCard' }
+        transitMinHours: { type: integer, minimum: 0 }
+        transitMaxHours: { type: integer, minimum: 0, description: 0 keeps the transit of the service (delivery days). }
+        planning: { $ref: '#/components/schemas/RoutePlanning' }
+        restrictions: { type: array, items: { $ref: '#/components/schemas/Restriction' } }
+        metadata: { type: object, additionalProperties: { type: string } }
+        priority: { type: integer }
+        active: { type: boolean }
+    CarrierRoutePage: { $ref: '#/components/schemas/_Page', x-items: CarrierRoute }
     DeliverySchedule:
       type: object
       required: [name]

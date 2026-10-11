@@ -134,6 +134,10 @@ type Carrier struct {
 	// Schedules are the delivery plannings of the carrier: pickup days and
 	// cut-off, delivery days, transit and window, per service and per zone.
 	Schedules []DeliverySchedule `json:"schedules,omitempty"`
+	// Restrictions apply to every service and route of the carrier.
+	Restrictions []Restriction `json:"restrictions,omitempty"`
+	// LogoURL is shown in the admin (optional).
+	LogoURL string `json:"logoUrl,omitempty"`
 }
 
 // DeliverySchedule is a carrier delivery planning. Schedules are layered on

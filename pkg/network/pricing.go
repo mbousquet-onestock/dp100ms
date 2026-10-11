@@ -106,6 +106,9 @@ func (n *Network) attachPricing(s *store.Store) {
 	}
 	for _, l := range n.Legs {
 		l.Restrictions = append(append([]model.Restriction(nil), l.Service.Restrictions...), l.Leg.Restrictions...)
+		if l.Carrier != nil {
+			l.Restrictions = append(l.Restrictions, l.Carrier.Restrictions...)
+		}
 		l.CarbonFactor = l.Service.CarbonGramsPerKgKm
 		if l.CarbonFactor == 0 {
 			l.CarbonFactor = defaultCarbon[l.Service.Kind]

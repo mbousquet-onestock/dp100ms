@@ -73,37 +73,18 @@ func (c *reqCtx) computeTiming(p *network.Path, start int64) *pathTiming {
 	ready := start
 	for i, l := range p.Legs {
 		plan := l.Plan(c.dept)
-		dep, ok := clk.NextDeparture(plan.PickupCal, ready, plan.Departures, plan.CutoffBefore)
+		var dep int64
+		var ok bool
+		dep, ok = plan.NextDeparture(clk, ready)
 		if !ok {
 			pt.reason = "no departure for leg " + l.ID
 			return pt
 		}
 		if l.Final {
-			day, _ := clk.Split(dep)
-			dd, ok := clk.AddWorkingDays(plan.DeliveryCal, day, plan.TransitDays)
+			from, to, ok := plan.Delivery(clk, dep, int64(l.Transit.Seconds()))
 			if !ok {
 				pt.reason = "no delivery day for leg " + l.ID
 				return pt
-			}
-			wEnd := plan.WindowEnd
-			if wEnd == 0 {
-				wEnd = 24*60 - 1
-			}
-			from := clk.At(dd, plan.WindowStart)
-			to := clk.At(dd, wEnd)
-			minArrival := dep + int64(l.Transit.Seconds())
-			if to <= minArrival {
-				// window already over when the van leaves: next delivery day
-				dd, ok = clk.AddWorkingDays(plan.DeliveryCal, dd+1, 0)
-				if !ok {
-					pt.reason = "no delivery day for leg " + l.ID
-					return pt
-				}
-				from = clk.At(dd, plan.WindowStart)
-				to = clk.At(dd, wEnd)
-			}
-			if from < minArrival {
-				from = minArrival
 			}
 			pt.legs = append(pt.legs, legTime{leg: l, dep: dep, arr: to})
 			pt.window = win{from, to}
@@ -111,6 +92,9 @@ func (c *reqCtx) computeTiming(p *network.Path, start int64) *pathTiming {
 			return pt
 		}
 		arr := dep + int64(l.Transit.Seconds())
+		if plan.TransitMaxSec > 0 {
+			arr = dep + plan.TransitMaxSec
+		}
 		pt.legs = append(pt.legs, legTime{leg: l, dep: dep, arr: arr})
 		node := l.ToNode
 		if node == nil || node.Hub == nil {

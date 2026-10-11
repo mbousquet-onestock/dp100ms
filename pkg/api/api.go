@@ -226,6 +226,21 @@ func (s *Server) routes() {
 		})
 	registerCRUD(s, "additional-services", "additional service", func(st *store.Store) *store.Collection[model.AdditionalService] { return st.AdditionalServices }, validateAdditionalService, nil)
 	registerCRUD(s, "stock-views", "stock view", func(st *store.Store) *store.Collection[model.StockView] { return st.StockViews }, validateStockView, nil)
+	registerCRUD(s, "zones", "zone", func(st *store.Store) *store.Collection[model.Zone] { return st.Zones }, validateZone,
+		func(r *http.Request) func(*model.Zone) bool {
+			q := r.URL.Query().Get("q")
+			return func(v *model.Zone) bool { return q == "" || contains(v.ID, q) || contains(v.Name, q) }
+		})
+	registerCRUD(s, "carrier-routes", "carrier route", func(st *store.Store) *store.Collection[model.CarrierRoute] { return st.CarrierRoutes }, validateCarrierRoute,
+		func(r *http.Request) func(*model.CarrierRoute) bool {
+			q := r.URL.Query()
+			carrier, svc, origin, dest, text := q.Get("carrierId"), q.Get("serviceId"), q.Get("originZoneId"), q.Get("destinationZoneId"), q.Get("q")
+			return func(v *model.CarrierRoute) bool {
+				return (carrier == "" || v.CarrierID == carrier) && (svc == "" || v.ServiceID == svc) &&
+					(origin == "" || v.OriginZoneID == origin) && (dest == "" || v.DestinationZoneID == dest) &&
+					(text == "" || contains(v.ID, text) || contains(v.Name, text))
+			}
+		})
 	m.HandleFunc("POST /api/v1/rate-cards/quote", s.quoteRateCard)
 	m.HandleFunc("POST /api/v1/rate-cards/{id}/quote", s.quoteRateCard)
 	m.HandleFunc("GET /api/v1/pricing/fields", s.pricingFields)
