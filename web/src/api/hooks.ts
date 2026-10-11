@@ -15,6 +15,8 @@ import type {
   StockViewPreview,
   Carrier,
   CarrierService,
+  CarrierRoute,
+  Zone,
   CompiledRoutes,
   Connections,
   Dashboard,
@@ -72,6 +74,9 @@ export const qk = {
   pricingFields: ['pricing', 'fields'] as const,
   skuPage: (p: object) => ['skus', 'page', p] as const,
   database: (t: string) => ['admin', 'database', t] as const,
+  zones: ['zones'] as const,
+  carrierRoutes: (p: object) => ['carrier-routes', p] as const,
+  carrierRoute: (id: string) => ['carrier-routes', 'one', id] as const,
 };
 
 // ---------------------------------------------------------------------------
@@ -131,6 +136,25 @@ export const useCarriers = () => useQuery({ queryKey: qk.carriers, queryFn: () =
 
 export const useServices = (carrierId?: string) =>
   useQuery({ queryKey: qk.services(carrierId), queryFn: () => api.get<Page<CarrierService>>('/services', { pageSize: 1000, carrierId }) });
+
+export const useZones = () => useQuery({ queryKey: qk.zones, queryFn: () => api.get<Page<Zone>>('/zones', { pageSize: 1000 }) });
+
+export interface CarrierRouteQuery {
+  carrierId?: string;
+  serviceId?: string;
+  originZoneId?: string;
+  destinationZoneId?: string;
+  q?: string;
+}
+export const useCarrierRoutes = (p: CarrierRouteQuery = {}) =>
+  useQuery({
+    queryKey: qk.carrierRoutes(p),
+    queryFn: () => api.get<Page<CarrierRoute>>('/carrier-routes', { pageSize: 1000, ...p }),
+    placeholderData: keepPreviousData,
+  });
+
+export const useCarrierRoute = (id: string | null) =>
+  useQuery({ queryKey: qk.carrierRoute(id ?? ''), queryFn: () => api.get<CarrierRoute>(`/carrier-routes/${encodeURIComponent(id!)}`), enabled: !!id });
 
 export const useHubs = () => useQuery({ queryKey: qk.hubs, queryFn: () => api.get<Page<Hub>>('/hubs', { pageSize: 1000 }) });
 
@@ -269,3 +293,5 @@ async function timed<T>(fn: () => Promise<T>): Promise<Timed<T>> {
 
 export const useRoutesCrud = () => useCrud<Route>('routes', [qk.graph, ['routes']]);
 export const useLegsCrud = () => useCrud<Leg>('legs', [qk.graph]);
+export const useZonesCrud = () => useCrud<Zone>('zones', [qk.zones, ['carrier-routes']]);
+export const useCarrierRoutesCrud = () => useCrud<CarrierRoute>('carrier-routes', [['carrier-routes']]);

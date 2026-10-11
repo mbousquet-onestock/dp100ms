@@ -34,7 +34,7 @@ export default function Skus() {
   const [edit, setEdit] = useState<SKU | null>(null);
   return (
     <div>
-      <PageHeader title="Articles" subtitle="Catalogue : dimensions, prix et attributs utilisés par les règles articles et les grilles tarifaires" />
+      <PageHeader title="Articles" subtitle="Catalogue : dimensions, prix et attributs utilisés par les règles articles et les grilles de coûts des routes" />
       <Card bodyClassName="overflow-x-auto">
         <div className="flex flex-wrap items-center justify-between gap-m border-b border-border px-xl py-l">
           <SearchInput value={q} onChange={setQ} placeholder="Rechercher un SKU ou un libellé" className="w-[320px]" />

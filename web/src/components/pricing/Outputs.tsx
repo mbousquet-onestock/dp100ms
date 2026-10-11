@@ -155,8 +155,8 @@ export function OutputsEditor({ value, onChange, variables, error }: { value: Ou
           <span className="truncate text-s font-medium" title={k}>
             {outputLabel(k)}
           </span>
-          <div className="flex min-w-0 items-center gap-m">
-            <div className="w-[180px] flex-none">
+          <div className="flex min-w-0 flex-wrap items-center gap-m">
+            <div className="w-[180px] max-w-full flex-none">
               <ComponentsCell value={c} onChange={(x) => setKey(k, x ?? {})} variables={vars} outputKey={k} />
             </div>
             <span className="truncate text-xs text-neutral-500">{summarizeComponents(c)}</span>

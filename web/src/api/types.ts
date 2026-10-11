@@ -70,6 +70,55 @@ export interface Carrier {
   rateCardIds?: string[];
   /** Delivery plannings (layered: carrier, service, zone, service + zone). */
   schedules?: DeliverySchedule[];
+  /** Article restrictions applied to every service and route of the carrier. */
+  restrictions?: Restriction[];
+  /** Logo shown in the admin (optional). */
+  logoUrl?: string;
+}
+
+/** Named set of departments ("*" = metropolitan France), postal code prefixes and stock points. */
+export interface Zone {
+  id: string;
+  name: string;
+  description?: string;
+  departments?: string[];
+  postalCodes?: string[];
+  stockPointIds?: string[];
+  active: boolean;
+}
+
+/** Planning of one weekday (1 = Monday … 7 = Sunday). */
+export interface RouteDay {
+  weekday: number;
+  pickups?: TimeOfDay[];
+  deliveryStart?: TimeOfDay;
+  deliveryEnd?: TimeOfDay;
+}
+
+export interface RoutePlanning {
+  timezone?: string;
+  days: RouteDay[];
+  honorHolidays: boolean;
+  closedDates?: string[];
+}
+
+/** Delivery route of a carrier service from an origin zone to a destination zone. */
+export interface CarrierRoute {
+  id: string;
+  carrierId: string;
+  serviceId: string;
+  name?: string;
+  originZoneId: string;
+  destinationZoneId: string;
+  costs?: RateCard;
+  /** Transit in hours from pickup to delivery (0 / 0 = service transit in days). */
+  transitMinHours: number;
+  transitMaxHours: number;
+  planning?: RoutePlanning;
+  restrictions?: Restriction[];
+  metadata?: Record<string, string>;
+  priority: number;
+  active: boolean;
 }
 
 export interface DeliverySchedule {
@@ -93,6 +142,8 @@ export interface SchedulePreviewRequest {
   serviceId: string;
   postalCode: string;
   readyAt: string;
+  /** Stock point or hub the leg leaves from (carrier routes depend on the origin zone). */
+  originId?: string;
 }
 
 export interface SchedulePreview {
@@ -103,8 +154,17 @@ export interface SchedulePreview {
   departure: string;
   deliveryDays: number[];
   transitDays: number;
-  delivery: { from: string; to: string };
+  delivery?: { from: string; to: string };
   rateCardIds: string[];
+  legId?: string;
+  final?: boolean;
+  departures?: TimeOfDay[];
+  windowStart?: TimeOfDay;
+  windowEnd?: TimeOfDay;
+  /** Carrier route applied (last planning layer). */
+  routeId?: string;
+  transitMinHours?: number;
+  transitMaxHours?: number;
 }
 
 export type ServiceKind =

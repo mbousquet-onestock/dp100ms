@@ -4,6 +4,8 @@ This guide explains how to configure, per carrier and per route, the tariff grid
 
 ## 1. Rate cards (grilles tarifaires)
 
+In the admin, carrier cost grids are edited on each carrier route (Transporteurs → carrier → Routes → Coûts, section 1 ter) and customer price grids (scope `ORDER`) inline in the delivery mode form (Configuration de la livraison). Standalone rate cards remain available in the API.
+
 A rate card is a grid evaluated on a **parcel**, a **shipment** (the parcels sharing a path) or the whole **order**. It returns one or more **outputs**:
 
 | Output | Meaning |
@@ -105,7 +107,7 @@ Schedules are **layered** on top of the service values, from the most general to
 }
 ```
 
-`POST /api/v1/carriers/{id}/schedule-preview` with `{"serviceId": "COLIVIA-STD", "postalCode": "20000", "readyAt": "2026-10-12T15:00:00+02:00"}` shows the layers applied, the departure, the delivery window and the grids used. In the admin, the carrier screen groups its services, its cost grids and its delivery schedules.
+`POST /api/v1/carriers/{id}/schedule-preview` with `{"serviceId": "COLIVIA-STD", "postalCode": "20000", "readyAt": "2026-10-12T15:00:00+02:00"}` shows the layers applied, the departure, the delivery window and the grids used. In the admin, the carrier screen (Transporteurs → carrier) groups its routes, its services, its restrictions and these schedules (tab "Plannings avancés"; routes take precedence).
 
 ## 1 ter. Zones and carrier routes (routes transporteur)
 

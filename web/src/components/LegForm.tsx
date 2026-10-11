@@ -150,9 +150,9 @@ export function LegDrawer({
           )}
         </div>
         <div>
-          <div className="os-title-s mb-s">Grilles tarifaires du leg</div>
+          <div className="os-title-s mb-s">Grilles de coût du leg</div>
           <p className="m-0 mb-m text-xs text-neutral-500">
-            Remplacent les grilles du service pour ce segment.{' '}
+            Remplacent, pour ce segment, la grille de la route transporteur et celles du service.{' '}
             {svc && ((svc.rateCardIds ?? []).length ? `Grilles du service : ${svc.rateCardIds!.join(', ')}.` : 'Le service n’a pas de grille : coût de base + coût par kg.')}
           </p>
           <ChipSelect

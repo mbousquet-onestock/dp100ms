@@ -1,5 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
+import { Link } from 'react-router-dom';
 import { ApiError, errorMessage } from '../api/client';
 import type { BadgeColor } from '../lib/labels';
 import { WEEKDAYS } from '../lib/labels';
@@ -563,3 +564,24 @@ export interface FieldErrorLike {
   field: string;
   message: string;
 }
+
+/** Breadcrumb: "Transporteurs > Colivia > Routes". */
+export function Breadcrumb({ items }: { items: { label: string; to?: string }[] }) {
+  return (
+    <nav className="mb-l flex min-w-0 flex-wrap items-center gap-s text-s" aria-label="Fil d'Ariane">
+      {items.map((it, i) => (
+        <span key={i} className="flex min-w-0 items-center gap-s">
+          {i > 0 && <IconChevronRight size={16} className="flex-none text-neutral-300" />}
+          {it.to ? (
+            <Link to={it.to} className="truncate text-neutral-500 hover:text-primary">
+              {it.label}
+            </Link>
+          ) : (
+            <span className="truncate font-medium text-neutral-800">{it.label}</span>
+          )}
+        </span>
+      ))}
+    </nav>
+  );
+}
+

@@ -5,7 +5,6 @@ import { DEFAULT_TOKEN } from '../api/client';
 import {
   IconBox,
   IconChart,
-  IconEuro,
   IconLayers,
   IconTool,
   IconChevronLeft,
@@ -16,6 +15,7 @@ import {
   IconGauge,
   IconHub,
   IconLock,
+  IconMap,
   IconMenu,
   IconPlay,
   IconRoute,
@@ -48,6 +48,7 @@ const NAV: { section?: string; items: NavItem[] }[] = [
       { to: '/stock-points', label: 'Points de stock', Icon: IconStore },
       { to: '/network', label: 'Routes et réseau', Icon: IconRoute },
       { to: '/hubs', label: 'Hubs', Icon: IconHub },
+      { to: '/zones', label: 'Zones', Icon: IconMap },
       { to: '/carriers', label: 'Transporteurs', Icon: IconTruck },
       { to: '/delivery-modes', label: 'Modes de livraison', Icon: IconTag },
     ],
@@ -56,7 +57,6 @@ const NAV: { section?: string; items: NavItem[] }[] = [
     section: 'Catalogue et tarification',
     items: [
       { to: '/skus', label: 'Articles', Icon: IconBox },
-      { to: '/rate-cards', label: 'Grilles tarifaires', Icon: IconEuro },
       { to: '/additional-services', label: 'Services associés', Icon: IconTool },
       { to: '/stock-views', label: 'Vues de stock', Icon: IconLayers },
     ],

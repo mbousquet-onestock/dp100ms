@@ -272,6 +272,27 @@
     color: var(--primary-1000);
   }
 
+  /* Pill tabs (OneStock Delivery: active = light teal background, teal text) */
+  .pill-tabs {
+    @apply flex gap-s overflow-x-auto border-b border-border pb-l;
+  }
+  .pill-tabs button {
+    @apply relative inline-flex h-[36px] flex-none items-center gap-s whitespace-nowrap rounded-m px-l text-s font-medium;
+    color: var(--neutral-500);
+  }
+  .pill-tabs button:hover {
+    color: var(--primary-1000);
+  }
+  .pill-tabs button[aria-selected='true'] {
+    background: var(--primary-t-100);
+    color: var(--primary-1000);
+  }
+  .round-icon {
+    @apply flex h-[48px] w-[48px] flex-none items-center justify-center overflow-hidden rounded-round;
+    background: var(--primary-t-100);
+    color: var(--primary-1000);
+  }
+
   /* Toggle switch */
   .switch {
     @apply relative inline-flex h-[20px] w-[36px] flex-none cursor-pointer items-center rounded-round;

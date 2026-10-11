@@ -1,168 +1,40 @@
 import { useEffect, useMemo, useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { api, errorMessage } from '../api/client';
-import { useCarriers, useCrud, usePricingFields, useQuote, useRateCards } from '../api/hooks';
-import type { Components, DerivedMetric, Range, RateCard, RateRow, RateScope, Surcharge } from '../api/types';
-import { RATE_SCOPES } from '../api/types';
-import { IconChevronDown, IconChevronLeft, IconChevronUp, IconCopy, IconPlay, IconPlus, IconTag, IconTrash } from '../components/Icons';
-import { cleanComponents, cleanOutputs, ComponentsCell, OutputsEditor, RangeCell, STANDARD_OUTPUTS, summarizeComponents } from '../components/pricing/Outputs';
-import { RuleBuilder } from '../components/pricing/RuleBuilder';
-import { SkuInput } from '../components/sim/SkuInput';
-import { Alert, Badge, Card, ConfirmButton, cx, EmptyState, ErrorAlert, errorsUnder, Field, ListInput, Loading, NumberInput, OptNumberInput, PageHeader, SearchInput, Segmented, Spinner, Switch, useDebounced, useToast } from '../components/ui';
-import { fmtNum } from '../lib/format';
-import { outputLabel, RATE_SCOPE_BADGE, RATE_SCOPE_HINT, RATE_SCOPE_LABEL, varLabel } from '../lib/labels';
+import { errorMessage } from '../../api/client';
+import { useCarriers, useCrud, usePricingFields, useQuote } from '../../api/hooks';
+import type { Components, DerivedMetric, Range, RateCard, RateRow, RateScope, Surcharge } from '../../api/types';
+import { RATE_SCOPES } from '../../api/types';
+import { IconChevronDown, IconChevronUp, IconCopy, IconPlay, IconPlus, IconTrash } from '../Icons';
+import { cleanComponents, cleanOutputs, ComponentsCell, OutputsEditor, RangeCell, STANDARD_OUTPUTS, summarizeComponents } from './Outputs';
+import { RuleBuilder } from './RuleBuilder';
+import { SkuInput } from '../sim/SkuInput';
+import { Alert, Badge, Card, ConfirmButton, cx, Drawer, EmptyState, ErrorAlert, errorsUnder, Field, ListInput, NumberInput, OptNumberInput, Segmented, Spinner, Switch, useToast } from '../ui';
+import { fmtNum } from '../../lib/format';
+import { outputLabel, RATE_SCOPE_HINT, RATE_SCOPE_LABEL, varLabel } from '../../lib/labels';
 
-const ROOTS = ['rateCard', 'card'];
+/**
+ * Reusable rate card editing blocks: card parameters, derived metrics, rows
+ * table, surcharges and a quote panel. Used by the delivery mode customer
+ * price grids and by the carrier route cost grid.
+ */
 
-const emptyCard = (carrierId = ''): RateCard => ({
+export const RATE_CARD_ROOTS = ['rateCard', 'card', 'costs'];
+
+export const emptyCard = (scope: RateScope = 'PARCEL', carrierId = ''): RateCard => ({
   id: '',
   name: '',
   carrierId,
-  scope: 'PARCEL',
+  scope,
   currency: 'EUR',
-  volumetricDivisor: 5000,
+  volumetricDivisor: scope === 'ORDER' ? undefined : 5000,
   derived: [],
-  rows: [{ label: 'Toutes tailles', conditions: {}, outputs: { cost: { fixed: 5 } } }],
+  rows: scope === 'ORDER' ? [{ label: 'Moins de 50 €', conditions: { orderAmount: { max: 50 } }, outputs: { price: { fixed: 4.9 } } }, { label: 'Franco', conditions: { orderAmount: { min: 50 } }, outputs: { price: { fixed: 0 } } }] : [{ label: 'Toutes tailles', conditions: {}, outputs: { cost: { fixed: 5 } } }],
   surcharges: [],
-  noMatch: 'REJECT',
+  noMatch: scope === 'ORDER' ? 'ZERO' : 'REJECT',
   active: true,
 });
 
-export default function RateCards() {
-  const [params, setParams] = useSearchParams();
-  const id = params.get('id');
-  const isNew = params.get('new') === '1';
-  const close = () => setParams({}, { replace: false });
-  if (id || isNew) return <EditorLoader id={id} carrierId={params.get('carrierId') ?? ''} onClose={close} onSaved={(cid) => setParams({ id: cid }, { replace: true })} />;
-  return <RateCardList onOpen={(cid) => setParams({ id: cid })} onNew={() => setParams({ new: '1' })} />;
-}
-
-// ---------------------------------------------------------------------------
-// List
-
-function RateCardList({ onOpen, onNew }: { onOpen: (id: string) => void; onNew: () => void }) {
-  const [scope, setScope] = useState<'' | RateScope>('');
-  const [carrierId, setCarrierId] = useState('');
-  const [q, setQ] = useState('');
-  const dq = useDebounced(q);
-  const cards = useRateCards({ scope: scope || undefined, carrierId: carrierId || undefined, q: dq || undefined });
-  const carriers = useCarriers();
-  const crud = useCrud<RateCard>('rate-cards', [['rate-cards']]);
-  const toast = useToast();
-  const carrierName = (cid?: string) => (cid ? carriers.data?.items.find((c) => c.id === cid)?.name ?? cid : '');
-  return (
-    <div>
-      <PageHeader
-        title="Grilles tarifaires"
-        subtitle="Grilles multi-critères calculant le coût transporteur, le prix client, le carbone et des sorties personnalisées"
-        actions={
-          <button className="btn btn-primary" onClick={onNew}>
-            <IconPlus /> Créer une grille
-          </button>
-        }
-      />
-      <Card bodyClassName="overflow-x-auto">
-        <div className="flex flex-wrap items-center gap-m border-b border-border px-xl py-l">
-          <Segmented<'' | RateScope>
-            value={scope}
-            onChange={setScope}
-            options={[{ value: '', label: 'Toutes' }, ...RATE_SCOPES.map((s) => ({ value: s, label: RATE_SCOPE_LABEL[s] }))]}
-          />
-          <select className="select w-[220px]" value={carrierId} onChange={(e) => setCarrierId(e.target.value)} aria-label="Transporteur">
-            <option value="">Tous les transporteurs</option>
-            {(carriers.data?.items ?? []).map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.name}
-              </option>
-            ))}
-          </select>
-          <SearchInput value={q} onChange={setQ} placeholder="Rechercher une grille" className="w-[260px]" />
-          <span className="ml-auto text-xs text-neutral-500">{cards.data ? `${cards.data.total} grilles` : ''}</span>
-        </div>
-        {cards.isLoading ? (
-          <Loading />
-        ) : cards.error ? (
-          <div className="p-xl">
-            <ErrorAlert error={cards.error} />
-          </div>
-        ) : cards.data?.items.length === 0 ? (
-          <EmptyState title="Aucune grille" icon={<IconTag size={40} />}>
-            Modifier les filtres ou créer une grille.
-          </EmptyState>
-        ) : (
-          <table className="table" data-testid="rate-card-list">
-            <thead>
-              <tr>
-                <th>Grille</th>
-                <th>Portée</th>
-                <th>Transporteur</th>
-                <th className="num">Lignes</th>
-                <th className="num">Suppléments</th>
-                <th>Sorties</th>
-                <th>Hors grille</th>
-                <th>Statut</th>
-                <th></th>
-              </tr>
-            </thead>
-            <tbody>
-              {cards.data?.items.map((c) => {
-                const outs = Array.from(new Set(c.rows.flatMap((r) => Object.keys(r.outputs ?? {}))));
-                return (
-                  <tr key={c.id} className="clickable" onClick={() => onOpen(c.id)}>
-                    <td>
-                      <div className="font-medium">{c.name}</div>
-                      <div className="text-xs text-neutral-500">{c.id}</div>
-                    </td>
-                    <td>
-                      <Badge color={RATE_SCOPE_BADGE[c.scope]}>{RATE_SCOPE_LABEL[c.scope] ?? c.scope}</Badge>
-                    </td>
-                    <td className="text-s">{carrierName(c.carrierId) || <span className="text-neutral-500">Aucun</span>}</td>
-                    <td className="num">{c.rows.length}</td>
-                    <td className="num">{c.surcharges?.length ?? 0}</td>
-                    <td className="text-xs">{outs.map(outputLabel).join(', ')}</td>
-                    <td className="text-xs">{c.noMatch === 'REJECT' ? 'Route refusée' : 'Rien ajouté'}</td>
-                    <td>{c.active ? <Badge color="green">Active</Badge> : <Badge color="grey">Inactive</Badge>}</td>
-                    <td className="text-right">
-                      <ConfirmButton iconOnly confirmLabel="Supprimer" onConfirm={() => crud.remove.mutate(c.id, { onSuccess: () => toast('Grille supprimée'), onError: (e) => toast(errorMessage(e), 'error') })} />
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        )}
-      </Card>
-    </div>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Editor
-
-function EditorLoader({ id, carrierId, onClose, onSaved }: { id: string | null; carrierId: string; onClose: () => void; onSaved: (id: string) => void }) {
-  const card = useQuery({ queryKey: ['rate-cards', 'one', id], queryFn: () => api.get<RateCard>(`/rate-cards/${encodeURIComponent(id!)}`), enabled: !!id });
-  if (!id) return <Editor key={`new-${carrierId}`} initial={emptyCard(carrierId)} isNew onClose={onClose} onSaved={onSaved} />;
-  if (card.isLoading) return <Loading />;
-  if (card.error)
-    return (
-      <div>
-        <BackLink onClose={onClose} />
-        <ErrorAlert error={card.error} title="Grille introuvable" />
-      </div>
-    );
-  return <Editor key={id + (card.dataUpdatedAt ?? 0)} initial={card.data!} isNew={false} onClose={onClose} onSaved={onSaved} />;
-}
-
-function BackLink({ onClose }: { onClose: () => void }) {
-  return (
-    <button className="btn btn-tertiary btn-sm mb-m -ml-m" onClick={onClose}>
-      <IconChevronLeft /> Grilles tarifaires
-    </button>
-  );
-}
-
-function normalizeCard(c: RateCard): RateCard {
+/** Card ready for the API: empty optional values removed. */
+export function normalizeCard(c: RateCard): RateCard {
   const conds = (m?: Record<string, Range>) => Object.fromEntries(Object.entries(m ?? {}).filter(([, r]) => r && (r.min !== undefined || r.max !== undefined)));
   const opt = <T,>(arr: T[] | undefined) => (arr && arr.length ? arr : undefined);
   return {
@@ -190,20 +62,89 @@ function normalizeCard(c: RateCard): RateCard {
   };
 }
 
-function Editor({ initial, isNew, onClose, onSaved }: { initial: RateCard; isNew: boolean; onClose: () => void; onSaved: (id: string) => void }) {
-  const [v, setV] = useState<RateCard>(() => ({ ...initial, derived: initial.derived ?? [], surcharges: initial.surcharges ?? [], noMatch: initial.noMatch ?? '' }));
-  const [extraConds, setExtraConds] = useState<string[]>([]);
-  const [extraOutputs, setExtraOutputs] = useState<string[]>([]);
+/** Local editing state of a card (lists always defined). */
+export const editable = (c: RateCard): RateCard => ({ ...c, rows: c.rows ?? [], derived: c.derived ?? [], surcharges: c.surcharges ?? [], noMatch: c.noMatch ?? '' });
+
+/** Full card editor: parameters, derived metrics, rows, surcharges. */
+export function RateCardForm({ value: v, onChange, error, isNew, showCarrier = true, scopes = RATE_SCOPES }: { value: RateCard; onChange: (c: RateCard) => void; error?: unknown; isNew: boolean; showCarrier?: boolean; scopes?: RateScope[] }) {
   const carriers = useCarriers();
   const fields = usePricingFields();
-  const crud = useCrud<RateCard>('rate-cards', [['rate-cards']]);
-  const toast = useToast();
-  const m = isNew ? crud.create : crud.update;
-  const set = <K extends keyof RateCard>(k: K, val: RateCard[K]) => setV((x) => ({ ...x, [k]: val }));
-  const dirty = useMemo(() => JSON.stringify(normalizeCard(v)) !== JSON.stringify(normalizeCard(initial)), [v, initial]);
-
+  const set = <K extends keyof RateCard>(k: K, val: RateCard[K]) => onChange({ ...v, [k]: val });
+  const fe = (name: string) => errorsUnder(error, name, RATE_CARD_ROOTS)[0]?.message;
   const derivedKeys = (v.derived ?? []).map((d) => d.key).filter(Boolean);
   const variables = [...(fields.data?.rateVariables ?? []), ...derivedKeys];
+  return (
+    <div className="flex min-w-0 flex-col gap-l">
+      <Card title="Paramètres de la grille">
+        <div className="grid gap-l md:grid-cols-2">
+          <Field label="Identifiant" error={fe('id')}>
+            <input className={cx('input', fe('id') && 'invalid')} value={v.id} disabled={!isNew} onChange={(e) => set('id', e.target.value)} placeholder="RC-FRANCO-50" />
+          </Field>
+          <Field label="Nom" error={fe('name')}>
+            <input className={cx('input', fe('name') && 'invalid')} value={v.name} onChange={(e) => set('name', e.target.value)} />
+          </Field>
+          {showCarrier && (
+            <Field label="Transporteur" error={fe('carrierId')}>
+              <select className="select" value={v.carrierId ?? ''} onChange={(e) => set('carrierId', e.target.value)}>
+                <option value="">Aucun (grille client)</option>
+                {(carriers.data?.items ?? []).map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name}
+                  </option>
+                ))}
+              </select>
+            </Field>
+          )}
+          {scopes.length > 1 && (
+            <Field label="Portée" className="md:col-span-2" hint={RATE_SCOPE_HINT[v.scope]} error={fe('scope')}>
+              <Segmented<RateScope> value={v.scope} onChange={(s) => set('scope', s)} options={scopes.map((s) => ({ value: s, label: RATE_SCOPE_LABEL[s] }))} />
+            </Field>
+          )}
+          <Field label="Devise">
+            <input className="input" value={v.currency} onChange={(e) => set('currency', e.target.value.toUpperCase())} maxLength={3} />
+          </Field>
+          {v.scope !== 'ORDER' && (
+            <Field label="Diviseur volumétrique (cm³/kg)" hint="Ex. 5000 ; vide = pas de poids volumétrique" error={fe('volumetricDivisor')}>
+              <OptNumberInput value={v.volumetricDivisor} onChange={(n) => set('volumetricDivisor', n)} placeholder="5000" />
+            </Field>
+          )}
+          <Field label="Si aucune ligne ne correspond" className="md:col-span-2" error={fe('noMatch')}>
+            <NoMatchToggle value={v.noMatch} onChange={(x) => set('noMatch', x)} />
+          </Field>
+          <Field label="Description" className="md:col-span-2">
+            <input className="input" value={v.description ?? ''} onChange={(e) => set('description', e.target.value)} />
+          </Field>
+        </div>
+        <div className="mt-l">
+          <Switch checked={v.active} onChange={(b) => set('active', b)} label={v.active ? 'Grille active' : 'Grille inactive'} />
+        </div>
+      </Card>
+      <DerivedEditor value={v.derived ?? []} onChange={(d) => set('derived', d)} variables={fields.data?.rateVariables ?? []} error={errorsUnder(error, 'derived', RATE_CARD_ROOTS)[0]?.message} />
+      <RowsEditor card={v} onChange={onChange} variables={variables} error={error} />
+      <SurchargesEditor value={v.surcharges ?? []} onChange={(s) => set('surcharges', s)} variables={variables} error={error} />
+    </div>
+  );
+}
+
+export function NoMatchToggle({ value, onChange }: { value: RateCard['noMatch']; onChange: (v: 'REJECT' | 'ZERO') => void }) {
+  return (
+    <Segmented<'REJECT' | 'ZERO'>
+      value={value === 'REJECT' ? 'REJECT' : 'ZERO'}
+      onChange={onChange}
+      options={[
+        { value: 'REJECT', label: 'Refuser la route' },
+        { value: 'ZERO', label: 'Ne rien ajouter' },
+      ]}
+    />
+  );
+}
+
+/** Generic rows table (all conditions, zones and outputs with their components). */
+export function RowsEditor({ card: v, onChange, variables, error }: { card: RateCard; onChange: (c: RateCard) => void; variables: string[]; error?: unknown }) {
+  const [extraConds, setExtraConds] = useState<string[]>([]);
+  const [extraOutputs, setExtraOutputs] = useState<string[]>([]);
+  const [customOut, setCustomOut] = useState('');
+  const setRows = (rows: RateRow[]) => onChange({ ...v, rows });
   const condCols = useMemo(() => {
     const seen: string[] = [];
     for (const r of v.rows) for (const k of Object.keys(r.conditions ?? {})) if (!seen.includes(k)) seen.push(k);
@@ -211,45 +152,21 @@ function Editor({ initial, isNew, onClose, onSaved }: { initial: RateCard; isNew
     return seen;
   }, [v.rows, extraConds]);
   const outCols = useMemo(() => {
-    const seen = [...STANDARD_OUTPUTS];
+    const seen = v.scope === 'ORDER' ? ['price'] : [...STANDARD_OUTPUTS];
     for (const r of v.rows) for (const k of Object.keys(r.outputs ?? {})) if (!seen.includes(k)) seen.push(k);
     for (const k of extraOutputs) if (!seen.includes(k)) seen.push(k);
     return seen;
-  }, [v.rows, extraOutputs]);
-
-  const fe = (name: string) => errorsUnder(m.error, name, ROOTS)[0]?.message;
-  const qc = useQueryClient();
-  const remove = async () => {
-    try {
-      await api.del(`/rate-cards/${encodeURIComponent(v.id)}`);
-      qc.removeQueries({ queryKey: ['rate-cards', 'one', v.id] });
-      toast('Grille supprimée');
-      onClose();
-      qc.invalidateQueries({ queryKey: ['rate-cards'] });
-    } catch (e) {
-      toast(errorMessage(e), 'error');
-    }
-  };
-  const save = () =>
-    m.mutate(normalizeCard(v), {
-      onSuccess: (saved) => {
-        toast('Grille enregistrée');
-        onSaved(saved.id);
-      },
-    });
-
-  const setRow = (i: number, r: RateRow) => set('rows', v.rows.map((x, j) => (j === i ? r : x)));
+  }, [v.rows, v.scope, extraOutputs]);
   const moveRow = (i: number, d: number) => {
     const j = i + d;
     if (j < 0 || j >= v.rows.length) return;
     const rows = [...v.rows];
     [rows[i], rows[j]] = [rows[j], rows[i]];
-    set('rows', rows);
+    setRows(rows);
   };
   const removeCond = (k: string) => {
     setExtraConds((x) => x.filter((y) => y !== k));
-    set(
-      'rows',
+    setRows(
       v.rows.map((r) => {
         const c = { ...(r.conditions ?? {}) };
         delete c[k];
@@ -259,8 +176,7 @@ function Editor({ initial, isNew, onClose, onSaved }: { initial: RateCard; isNew
   };
   const removeOutput = (k: string) => {
     setExtraOutputs((x) => x.filter((y) => y !== k));
-    set(
-      'rows',
+    setRows(
       v.rows.map((r) => {
         const o = { ...r.outputs };
         delete o[k];
@@ -268,206 +184,107 @@ function Editor({ initial, isNew, onClose, onSaved }: { initial: RateCard; isNew
       }),
     );
   };
-  const [customOut, setCustomOut] = useState('');
-
   return (
-    <div data-testid="rate-card-editor">
-      <BackLink onClose={onClose} />
-      <PageHeader
-        title={isNew ? 'Nouvelle grille tarifaire' : v.name || v.id}
-        subtitle={
-          <span className="flex flex-wrap items-center gap-m">
-            {!isNew && <span>{v.id}</span>}
-            <Badge color={RATE_SCOPE_BADGE[v.scope]}>{RATE_SCOPE_LABEL[v.scope]}</Badge>
-            {dirty && <Badge color="orange">Modifications non enregistrées</Badge>}
-          </span>
-        }
-        actions={
-          <>
-            {!isNew && <ConfirmButton small={false} onConfirm={remove} label="Supprimer" />}
-            <button className="btn btn-secondary" onClick={() => setV({ ...initial, derived: initial.derived ?? [], surcharges: initial.surcharges ?? [], noMatch: initial.noMatch ?? '' })} disabled={!dirty}>
-              Annuler les modifications
-            </button>
-            <button className="btn btn-primary" onClick={save} disabled={m.isPending} data-testid="save-rate-card">
-              {m.isPending && <Spinner size={16} className="text-white" />}
-              Enregistrer
-            </button>
-          </>
-        }
-      />
-      {m.error ? <ErrorAlert error={m.error} title="Enregistrement impossible" className="mb-l" /> : null}
-
-      <div className="grid gap-l 2xl:grid-cols-[minmax(0,1fr)_400px]">
-        <div className="flex min-w-0 flex-col gap-l">
-          {/* Header */}
-          <Card title="Paramètres de la grille">
-            <div className="grid gap-l md:grid-cols-2 xl:grid-cols-4">
-              <Field label="Identifiant" error={fe('id')}>
-                <input className={cx('input', fe('id') && 'invalid')} value={v.id} disabled={!isNew} onChange={(e) => set('id', e.target.value)} placeholder="RC-CARRIER-STD" />
-              </Field>
-              <Field label="Nom" error={fe('name')} className="xl:col-span-2">
-                <input className={cx('input', fe('name') && 'invalid')} value={v.name} onChange={(e) => set('name', e.target.value)} />
-              </Field>
-              <Field label="Transporteur" error={fe('carrierId')}>
-                <select className="select" value={v.carrierId ?? ''} onChange={(e) => set('carrierId', e.target.value)}>
-                  <option value="">Aucun (grille client)</option>
-                  {(carriers.data?.items ?? []).map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.name}
-                    </option>
-                  ))}
-                </select>
-              </Field>
-              <Field label="Portée" className="md:col-span-2" hint={RATE_SCOPE_HINT[v.scope]} error={fe('scope')}>
-                <Segmented<RateScope> value={v.scope} onChange={(s) => set('scope', s)} options={RATE_SCOPES.map((s) => ({ value: s, label: RATE_SCOPE_LABEL[s] }))} />
-              </Field>
-              <Field label="Devise">
-                <input className="input" value={v.currency} onChange={(e) => set('currency', e.target.value.toUpperCase())} maxLength={3} />
-              </Field>
-              <Field label="Diviseur volumétrique (cm³/kg)" hint="Ex. 5000 ; vide = pas de poids volumétrique" error={fe('volumetricDivisor')}>
-                <OptNumberInput value={v.volumetricDivisor} onChange={(n) => set('volumetricDivisor', n)} placeholder="5000" />
-              </Field>
-              <Field label="Si aucune ligne ne correspond" className="md:col-span-2" error={fe('noMatch')}>
-                <Segmented<'REJECT' | 'ZERO'>
-                  value={v.noMatch === 'REJECT' ? 'REJECT' : 'ZERO'}
-                  onChange={(x) => set('noMatch', x)}
-                  options={[
-                    { value: 'REJECT', label: 'Refuser la route' },
-                    { value: 'ZERO', label: 'Ne rien ajouter' },
-                  ]}
-                />
-              </Field>
-              <Field label="Description" className="md:col-span-2">
-                <input className="input" value={v.description ?? ''} onChange={(e) => set('description', e.target.value)} />
-              </Field>
-            </div>
-            <div className="mt-l">
-              <Switch checked={v.active} onChange={(b) => set('active', b)} label={v.active ? 'Grille active' : 'Grille inactive'} />
-            </div>
-          </Card>
-
-          {/* Derived metrics */}
-          <DerivedEditor value={v.derived ?? []} onChange={(d) => set('derived', d)} variables={fields.data?.rateVariables ?? []} error={errorsUnder(m.error, 'derived', ROOTS)[0]?.message} />
-
-          {/* Rows */}
-          <Card
-            title={`Lignes de la grille (${v.rows.length})`}
-            bodyClassName=""
-            actions={
-              <button className="btn btn-secondary btn-sm" onClick={() => set('rows', [...v.rows, { label: '', conditions: {}, outputs: v.rows.length ? JSON.parse(JSON.stringify(v.rows[v.rows.length - 1].outputs)) : { cost: {} } }])} data-testid="add-row">
-                <IconPlus /> Ajouter une ligne
-              </button>
-            }
+    <Card
+      title={`Lignes de la grille (${v.rows.length})`}
+      bodyClassName=""
+      actions={
+        <button className="btn btn-secondary btn-sm" onClick={() => setRows([...v.rows, { label: '', conditions: {}, outputs: v.rows.length ? JSON.parse(JSON.stringify(v.rows[v.rows.length - 1].outputs)) : { cost: {} } }])} data-testid="add-row">
+          <IconPlus /> Ajouter une ligne
+        </button>
+      }
+    >
+      <div className="flex flex-wrap items-center gap-m border-b border-border px-xl py-m">
+        <Alert kind="info" className="min-w-[240px] flex-1 py-s">
+          L'ordre compte : la première ligne dont toutes les conditions correspondent est retenue. Condition [min, max) : minimum inclus, maximum exclu, case vide = ouverte.
+        </Alert>
+        <select className="select h-[30px] w-[220px] text-xs" value="" aria-label="Ajouter une condition" data-testid="add-condition" onChange={(e) => e.target.value && setExtraConds((x) => [...x, e.target.value])}>
+          <option value="">Ajouter une condition</option>
+          {variables
+            .filter((x) => !condCols.includes(x))
+            .map((x) => (
+              <option key={x} value={x}>
+                {varLabel(x)}
+              </option>
+            ))}
+        </select>
+        <div className="flex items-center gap-s">
+          <input className="input h-[30px] w-[150px] text-xs" value={customOut} onChange={(e) => setCustomOut(e.target.value.replace(/\s/g, ''))} placeholder="Sortie personnalisée" aria-label="Sortie personnalisée" />
+          <button
+            className="btn btn-tertiary btn-sm"
+            disabled={!customOut || outCols.includes(customOut)}
+            onClick={() => {
+              setExtraOutputs((x) => [...x, customOut]);
+              setCustomOut('');
+            }}
           >
-            <div className="flex flex-wrap items-center gap-m border-b border-border px-xl py-m">
-              <Alert kind="info" className="min-w-[280px] flex-1 py-s">
-                L'ordre compte : la première ligne dont toutes les conditions correspondent est retenue. Condition [min, max) : minimum inclus, maximum exclu, case vide = ouverte.
-              </Alert>
-              <select
-                className="select h-[30px] w-[220px] text-xs"
-                value=""
-                aria-label="Ajouter une condition"
-                data-testid="add-condition"
-                onChange={(e) => e.target.value && setExtraConds((x) => [...x, e.target.value])}
-              >
-                <option value="">Ajouter une condition</option>
-                {variables
-                  .filter((x) => !condCols.includes(x))
-                  .map((x) => (
-                    <option key={x} value={x}>
-                      {varLabel(x)}
-                    </option>
-                  ))}
-              </select>
-              <div className="flex items-center gap-s">
-                <input className="input h-[30px] w-[150px] text-xs" value={customOut} onChange={(e) => setCustomOut(e.target.value.replace(/\s/g, ''))} placeholder="Sortie personnalisée" aria-label="Sortie personnalisée" />
-                <button
-                  className="btn btn-tertiary btn-sm"
-                  disabled={!customOut || outCols.includes(customOut)}
-                  onClick={() => {
-                    setExtraOutputs((x) => [...x, customOut]);
-                    setCustomOut('');
-                  }}
-                >
-                  <IconPlus /> Sortie
-                </button>
-              </div>
-            </div>
-            <div className="overflow-x-auto">
-              <table className="table table-compact" data-testid="rate-rows">
-                <thead>
-                  <tr>
-                    <th className="w-[32px]">#</th>
-                    <th className="min-w-[140px]">Libellé</th>
-                    {condCols.map((k) => (
-                      <th key={k} className="min-w-[150px]" style={{ background: 'var(--blue-t-100)' }}>
-                        <span className="flex items-center justify-between gap-s">
-                          <span className="truncate" title={k}>
-                            {varLabel(k)}
-                          </span>
-                          <button className="btn btn-tertiary btn-sm btn-icon h-[22px] w-[22px]" onClick={() => removeCond(k)} title="Retirer la condition" aria-label={`Retirer la condition ${k}`}>
-                            <IconTrash size={14} />
-                          </button>
-                        </span>
-                      </th>
-                    ))}
-                    <th className="min-w-[130px]" style={{ background: 'var(--blue-t-100)' }}>
-                      Zones (départements)
-                    </th>
-                    {outCols.map((k) => (
-                      <th key={k} className="min-w-[150px]" style={{ background: 'var(--primary-t-100)' }}>
-                        <span className="flex items-center justify-between gap-s">
-                          <span className="truncate" title={k}>
-                            {outputLabel(k)}
-                          </span>
-                          {!STANDARD_OUTPUTS.includes(k) && (
-                            <button className="btn btn-tertiary btn-sm btn-icon h-[22px] w-[22px]" onClick={() => removeOutput(k)} title="Retirer la sortie" aria-label={`Retirer la sortie ${k}`}>
-                              <IconTrash size={14} />
-                            </button>
-                          )}
-                        </span>
-                      </th>
-                    ))}
-                    <th className="w-[120px]"></th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {v.rows.map((r, i) => {
-                    const errs = errorsUnder(m.error, `rows[${i}]`, ROOTS);
-                    return (
-                      <RowEditor
-                        key={i}
-                        index={i}
-                        row={r}
-                        condCols={condCols}
-                        outCols={outCols}
-                        variables={variables}
-                        errors={errs.map((e) => `${e.field.replace(`rows[${i}]`, '').replace(/^\./, '') || 'ligne'} : ${e.message}`)}
-                        onChange={(x) => setRow(i, x)}
-                        onMove={(d) => moveRow(i, d)}
-                        onDuplicate={() => set('rows', [...v.rows.slice(0, i + 1), JSON.parse(JSON.stringify(r)), ...v.rows.slice(i + 1)])}
-                        onRemove={() => set('rows', v.rows.filter((_, j) => j !== i))}
-                        last={i === v.rows.length - 1}
-                      />
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-            {v.rows.length === 0 && <EmptyState title="Aucune ligne">Ajouter au moins une ligne.</EmptyState>}
-          </Card>
-
-          {/* Surcharges */}
-          <SurchargesEditor value={v.surcharges ?? []} onChange={(s) => set('surcharges', s)} variables={variables} error={m.error} />
-        </div>
-
-        <div className="min-w-0">
-          <div className="2xl:sticky 2xl:top-[64px]">
-            <QuotePanel card={v} normalized={normalizeCard(v)} dirty={dirty || isNew} />
-          </div>
+            <IconPlus /> Sortie
+          </button>
         </div>
       </div>
-    </div>
+      <div className="overflow-x-auto">
+        <table className="table table-compact" data-testid="rate-rows">
+          <thead>
+            <tr>
+              <th className="w-[32px]">#</th>
+              <th className="min-w-[140px]">Libellé</th>
+              {condCols.map((k) => (
+                <th key={k} className="min-w-[150px]" style={{ background: 'var(--blue-t-100)' }}>
+                  <span className="flex items-center justify-between gap-s">
+                    <span className="truncate" title={k}>
+                      {varLabel(k)}
+                    </span>
+                    <button className="btn btn-tertiary btn-sm btn-icon h-[22px] w-[22px]" onClick={() => removeCond(k)} title="Retirer la condition" aria-label={`Retirer la condition ${k}`}>
+                      <IconTrash size={14} />
+                    </button>
+                  </span>
+                </th>
+              ))}
+              <th className="min-w-[130px]" style={{ background: 'var(--blue-t-100)' }}>
+                Zones (départements)
+              </th>
+              {outCols.map((k) => (
+                <th key={k} className="min-w-[150px]" style={{ background: 'var(--primary-t-100)' }}>
+                  <span className="flex items-center justify-between gap-s">
+                    <span className="truncate" title={k}>
+                      {outputLabel(k)}
+                    </span>
+                    {!STANDARD_OUTPUTS.includes(k) && (
+                      <button className="btn btn-tertiary btn-sm btn-icon h-[22px] w-[22px]" onClick={() => removeOutput(k)} title="Retirer la sortie" aria-label={`Retirer la sortie ${k}`}>
+                        <IconTrash size={14} />
+                      </button>
+                    )}
+                  </span>
+                </th>
+              ))}
+              <th className="w-[120px]"></th>
+            </tr>
+          </thead>
+          <tbody>
+            {v.rows.map((r, i) => {
+              const errs = errorsUnder(error, `rows[${i}]`, RATE_CARD_ROOTS);
+              return (
+                <RowEditor
+                  key={i}
+                  index={i}
+                  row={r}
+                  condCols={condCols}
+                  outCols={outCols}
+                  variables={variables}
+                  errors={errs.map((e) => `${e.field.replace(`rows[${i}]`, '').replace(/^\./, '') || 'ligne'} : ${e.message}`)}
+                  onChange={(x) => setRows(v.rows.map((y, j) => (j === i ? x : y)))}
+                  onMove={(d) => moveRow(i, d)}
+                  onDuplicate={() => setRows([...v.rows.slice(0, i + 1), JSON.parse(JSON.stringify(r)), ...v.rows.slice(i + 1)])}
+                  onRemove={() => setRows(v.rows.filter((_, j) => j !== i))}
+                  last={i === v.rows.length - 1}
+                />
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+      {v.rows.length === 0 && <EmptyState title="Aucune ligne">Ajouter au moins une ligne.</EmptyState>}
+    </Card>
   );
 }
 
@@ -556,7 +373,7 @@ function RowEditor({
   );
 }
 
-function DerivedEditor({ value, onChange, variables, error }: { value: DerivedMetric[]; onChange: (d: DerivedMetric[]) => void; variables: string[]; error?: string }) {
+export function DerivedEditor({ value, onChange, variables, error }: { value: DerivedMetric[]; onChange: (d: DerivedMetric[]) => void; variables: string[]; error?: string }) {
   const set = (i: number, d: DerivedMetric) => onChange(value.map((x, j) => (j === i ? d : x)));
   return (
     <Card
@@ -616,7 +433,7 @@ function DerivedEditor({ value, onChange, variables, error }: { value: DerivedMe
   );
 }
 
-function ConditionsList({ value, onChange, variables }: { value: Record<string, Range> | undefined; onChange: (c: Record<string, Range>) => void; variables: string[] }) {
+export function ConditionsList({ value, onChange, variables }: { value: Record<string, Range> | undefined; onChange: (c: Record<string, Range>) => void; variables: string[] }) {
   const entries = Object.entries(value ?? {});
   const rename = (from: string, to: string) => onChange(Object.fromEntries(entries.map(([k, r]) => [k === from ? to : k, r])));
   return (
@@ -660,7 +477,7 @@ function ConditionsList({ value, onChange, variables }: { value: Record<string, 
   );
 }
 
-function SurchargesEditor({ value, onChange, variables, error }: { value: Surcharge[]; onChange: (s: Surcharge[]) => void; variables: string[]; error: unknown }) {
+export function SurchargesEditor({ value, onChange, variables, error }: { value: Surcharge[]; onChange: (s: Surcharge[]) => void; variables: string[]; error: unknown }) {
   const set = (i: number, s: Surcharge) => onChange(value.map((x, j) => (j === i ? s : x)));
   return (
     <Card
@@ -675,7 +492,7 @@ function SurchargesEditor({ value, onChange, variables, error }: { value: Surcha
       {value.length === 0 && <div className="text-xs text-neutral-500">Aucun supplément</div>}
       <div className="flex flex-col gap-l">
         {value.map((s, i) => {
-          const errs = errorsUnder(error, `surcharges[${i}]`, ROOTS);
+          const errs = errorsUnder(error, `surcharges[${i}]`, RATE_CARD_ROOTS);
           return (
             <div key={i} className={cx('rounded-m border p-l', errs.length ? 'border-error' : 'border-border')} data-testid="surcharge">
               <div className="grid gap-m sm:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)_36px]">
@@ -717,7 +534,7 @@ function SurchargesEditor({ value, onChange, variables, error }: { value: Surcha
 // ---------------------------------------------------------------------------
 // Quote simulation
 
-function QuotePanel({ card, normalized, dirty }: { card: RateCard; normalized: RateCard; dirty: boolean }) {
+export function QuotePanel({ card, normalized, dirty }: { card: RateCard; normalized: RateCard; dirty: boolean }) {
   const [lines, setLines] = useState<{ sku: string; quantity: number }[]>([{ sku: 'SKU-00001', quantity: 2 }]);
   const [vars, setVars] = useState<{ name: string; value: number }[]>([]);
   const [zone, setZone] = useState('75');
@@ -729,7 +546,7 @@ function QuotePanel({ card, normalized, dirty }: { card: RateCard; normalized: R
     quote.mutate({
       id: dirty ? undefined : card.id,
       body: {
-        card: dirty ? normalized : undefined,
+        card: dirty ? { ...normalized, id: normalized.id || 'APERCU', name: normalized.name || 'Aperçu' } : undefined,
         items: lines.filter((l) => l.sku.trim()).map((l) => ({ sku: l.sku.trim(), quantity: l.quantity })),
         vars: vars.length ? Object.fromEntries(vars.map((x) => [x.name, x.value])) : undefined,
         zone: zone.trim() || undefined,
@@ -855,7 +672,7 @@ function QuotePanel({ card, normalized, dirty }: { card: RateCard; normalized: R
   );
 }
 
-function RowsSummary({ card }: { card: RateCard }) {
+export function RowsSummary({ card }: { card: RateCard }) {
   if (!card.rows.length) return null;
   return (
     <details className="border-t border-border pt-m">
@@ -872,5 +689,93 @@ function RowsSummary({ card }: { card: RateCard }) {
         ))}
       </ol>
     </details>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Drawer editing one saved card (create / update / delete)
+
+export function RateCardDrawer({
+  state,
+  onClose,
+  onSaved,
+  onDeleted,
+  scopes = RATE_SCOPES,
+}: {
+  state: { card: RateCard; isNew: boolean } | null;
+  onClose: () => void;
+  onSaved?: (c: RateCard) => void;
+  onDeleted?: (id: string) => void;
+  scopes?: RateScope[];
+}) {
+  const crud = useCrud<RateCard>('rate-cards', [['rate-cards']]);
+  const toast = useToast();
+  const [v, setV] = useState<RateCard | null>(null);
+  const m = state?.isNew ? crud.create : crud.update;
+  useEffect(() => {
+    if (state) {
+      setV(editable(state.card));
+      crud.create.reset();
+      crud.update.reset();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [state]);
+  if (!state || !v) return null;
+  const normalized = normalizeCard(v);
+  return (
+    <Drawer
+      open
+      onClose={onClose}
+      title={state.isNew ? 'Nouvelle grille' : `Grille ${state.card.name || state.card.id}`}
+      width={1100}
+      footer={
+        <>
+          {!state.isNew && (
+            <span className="mr-auto">
+              <ConfirmButton
+                small={false}
+                pending={crud.remove.isPending}
+                onConfirm={() =>
+                  crud.remove.mutate(v.id, {
+                    onSuccess: () => {
+                      toast('Grille supprimée');
+                      onDeleted?.(v.id);
+                      onClose();
+                    },
+                    onError: (e) => toast(errorMessage(e), 'error'),
+                  })
+                }
+              />
+            </span>
+          )}
+          <button className="btn btn-secondary" onClick={onClose}>
+            Annuler
+          </button>
+          <button
+            className="btn btn-primary"
+            disabled={m.isPending}
+            data-testid="save-rate-card"
+            onClick={() =>
+              m.mutate(normalized, {
+                onSuccess: (saved) => {
+                  toast('Grille enregistrée');
+                  onSaved?.(saved);
+                  onClose();
+                },
+              })
+            }
+          >
+            {m.isPending && <Spinner size={16} className="text-white" />}
+            Enregistrer
+          </button>
+        </>
+      }
+    >
+      <div className="flex flex-col gap-l" data-testid="rate-card-editor">
+        {m.error ? <ErrorAlert error={m.error} title="Enregistrement impossible" /> : null}
+        <RateCardForm value={v} onChange={setV} error={m.error} isNew={state.isNew} showCarrier={!scopes.every((s) => s === 'ORDER')} scopes={scopes} />
+        <QuotePanel card={v} normalized={normalized} dirty />
+      </div>
+    </Drawer>
   );
 }

@@ -114,6 +114,8 @@ export function cleanCarrier(c: Carrier): Carrier {
   return {
     ...c,
     rateCardIds: opt(c.rateCardIds),
+    restrictions: opt(c.restrictions),
+    logoUrl: c.logoUrl || undefined,
     schedules: opt(
       (c.schedules ?? []).map((s) => ({
         ...s,
