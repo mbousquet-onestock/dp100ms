@@ -8,7 +8,7 @@ import (
 )
 
 func tptr(s string) *model.TimeOfDay { t := model.MustTOD(s); return &t }
-func iptr(i int) *int               { return &i }
+func iptr(i int) *int                { return &i }
 
 func setCarrier(t *testing.T, f *fixture, id string, fn func(*model.Carrier)) {
 	t.Helper()
