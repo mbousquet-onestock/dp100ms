@@ -12,13 +12,15 @@ package model
 // any of its departments ("*" = metropolitan France), postal code prefixes
 // or stock point IDs.
 type Zone struct {
-	ID            string   `json:"id"`
-	Name          string   `json:"name"`
-	Description   string   `json:"description,omitempty"`
-	Departments   []string `json:"departments,omitempty"`
-	PostalCodes   []string `json:"postalCodes,omitempty"`
-	StockPointIDs []string `json:"stockPointIds,omitempty"`
-	Active        bool     `json:"active"`
+	ID          string   `json:"id"`
+	Name        string   `json:"name"`
+	Description string   `json:"description,omitempty"`
+	Departments []string `json:"departments,omitempty"`
+	// ExcludedDepartments are removed from the zone (e.g. "*" without "20").
+	ExcludedDepartments []string `json:"excludedDepartments,omitempty"`
+	PostalCodes         []string `json:"postalCodes,omitempty"`
+	StockPointIDs       []string `json:"stockPointIds,omitempty"`
+	Active              bool     `json:"active"`
 }
 
 // RouteDay is the planning of one weekday (1 = Monday … 7 = Sunday):
@@ -41,8 +43,12 @@ type RoutePlanning struct {
 }
 
 // CarrierRoute is a delivery route of a carrier service from an origin zone
-// to a destination zone. When several routes match a leg and a destination,
-// the highest priority wins, then the most specific destination zone.
+// to a destination zone. For a service delivering the customer, routes are
+// the source of truth: every stock point of the origin zone can ship with
+// the service to the destination zone (one direct leg per stock point and
+// service is generated). When several routes match a stock point and a
+// destination, the highest priority wins, then the most specific
+// destination zone.
 type CarrierRoute struct {
 	ID                string `json:"id"`
 	CarrierID         string `json:"carrierId"`

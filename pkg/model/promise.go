@@ -57,12 +57,15 @@ type TimeWindow struct {
 }
 
 type LegResult struct {
-	LegID              string             `json:"legId"`
-	From               string             `json:"from"`
-	To                 string             `json:"to"`
-	Carrier            string             `json:"carrier"`
-	CarrierName        string             `json:"carrierName"`
-	Service            string             `json:"service"`
+	LegID       string `json:"legId"`
+	From        string `json:"from"`
+	To          string `json:"to"`
+	Carrier     string `json:"carrier"`
+	CarrierName string `json:"carrierName"`
+	Service     string `json:"service"`
+	ServiceName string `json:"serviceName"`
+	// RouteID is the carrier route applied to this leg (empty = none).
+	RouteID            string             `json:"routeId,omitempty"`
 	ServiceKind        ServiceKind        `json:"serviceKind"`
 	EstimatedDeparture time.Time          `json:"estimatedDeparture"`
 	EstimatedArrival   time.Time          `json:"estimatedArrival"`
@@ -216,9 +219,43 @@ type Unfulfillable struct {
 }
 
 type PromiseResponse struct {
-	RequestID         string          `json:"requestId"`
+	RequestID string `json:"requestId"`
+	// BestByMode gives, for every requested mode that can be served, the
+	// best delivery route found (the first option of the mode).
+	BestByMode        []ModeBest      `json:"bestByMode"`
 	Options           []PromiseOption `json:"options"`
 	Unavailable       []Unfulfillable `json:"unavailable"`
 	CalculationTimeMs float64         `json:"calculationTimeMs"`
 	Stats             EngineStats     `json:"stats"`
+}
+
+// ModeBest summarises the best delivery route of a delivery mode.
+type ModeBest struct {
+	DeliveryMode      string     `json:"deliveryMode"`
+	OptionID          string     `json:"optionId"`
+	Strategy          string     `json:"strategy"`
+	EstimatedDelivery TimeWindow `json:"estimatedDelivery"`
+	LeadTimeHours     float64    `json:"leadTimeHours"`
+	// Cost paid to carriers (with preparation), Price billed to the
+	// customer, CarbonKg emitted.
+	Cost     float64 `json:"cost"`
+	Price    float64 `json:"price"`
+	CarbonKg float64 `json:"carbonKg"`
+	Currency string  `json:"currency"`
+	Packages int     `json:"packages"`
+	// Carriers delivering the customer (final legs) with their routes.
+	Carriers []CarrierUse `json:"carriers"`
+	// ShippingPoints ship the order; AlternativeShippingPoints could ship
+	// one of its packages instead (see packages[].alternatives).
+	ShippingPoints            []string `json:"shippingPoints"`
+	AlternativeShippingPoints []string `json:"alternativeShippingPoints"`
+}
+
+type CarrierUse struct {
+	CarrierID   string   `json:"carrierId"`
+	CarrierName string   `json:"carrierName"`
+	ServiceID   string   `json:"serviceId"`
+	ServiceName string   `json:"serviceName"`
+	RouteIDs    []string `json:"routeIds"`
+	Packages    int      `json:"packages"`
 }

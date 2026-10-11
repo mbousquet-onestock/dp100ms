@@ -29,6 +29,7 @@ func (c *reqCtx) qty(item, col int) int {
 }
 
 func (c *reqCtx) setView(mode string) {
+	c.ops = opsOf(c.mode(mode))
 	c.view = nil
 	id := c.req.StockViewID
 	if id == "" {
@@ -318,7 +319,7 @@ func (c *reqCtx) finalizePlan(p *plan) bool {
 			p.metrics[idx] += x
 		}
 	}
-	if len(p.shift) > 0 {
+	if len(p.shift) > 0 || c.ops.reception > 0 {
 		p.window = win{}
 		for si, s := range p.ships {
 			if s.kind == "INBOUND" {
@@ -343,6 +344,9 @@ func (c *reqCtx) shipWindow(p *plan, si int) win {
 	s := p.ships[si]
 	w := s.timing.window
 	days := p.shift[si]
+	if r := c.ops.reception; r > 0 {
+		w = win{From: w.From + r, To: w.To + r}
+	}
 	if days == 0 {
 		return w
 	}

@@ -73,7 +73,8 @@ type reqCtx struct {
 	postal   string
 	dept     string
 	items    []item
-	prep     []int64 // by node index, -1 = not computed
+	prep     map[string][]int64 // by operation set, then node index (-1 = not computed)
+	ops      modeOps            // operations of the mode being planned
 	colNodes []*network.Node
 	ptPool   []pathTiming
 	legPool  []legTime
@@ -206,7 +207,7 @@ func (e *Engine) Promise(req *model.PromiseRequest) (*model.PromiseResponse, err
 	c := &reqCtx{
 		e: e, net: net, sn: e.store.Stock.Snapshot(skus), req: req,
 		order: req.OrderDate.In(net.Loc), postal: req.Destination.PostalCode, dept: dept, items: items,
-		prep: newPrep(len(net.NodeList)), timings: make(map[timingKey]*pathTiming, 256),
+		prep: map[string][]int64{}, timings: make(map[timingKey]*pathTiming, 256),
 		weights: net.Settings.Weights, clk: calendar.ClockFor(net.Loc), orderU: req.OrderDate.Unix(),
 	}
 	c.colNodes = net.NodesForColumns(c.sn.PointIDs)
@@ -247,9 +248,24 @@ func (e *Engine) Promise(req *model.PromiseRequest) (*model.PromiseResponse, err
 	}
 	c.stats.RouteCacheHit = allHit
 	selected := selectPlans(perMode, maxOptions)
+	built := map[*plan]int{}
 	for i, p := range selected {
 		c.setView(p.mode)
 		resp.Options = append(resp.Options, c.buildOption(p, i+1))
+		built[p] = i
+	}
+	resp.BestByMode = make([]model.ModeBest, 0, len(perMode))
+	for _, plans := range perMode {
+		best := plans[0]
+		if i, ok := built[best]; ok {
+			resp.BestByMode = append(resp.BestByMode, summarize(&resp.Options[i]))
+			continue
+		}
+		c.setView(best.mode) // not among the returned options (maxOptions)
+		o := c.buildOption(best, 0)
+		mb := summarize(&o)
+		mb.OptionID = ""
+		resp.BestByMode = append(resp.BestByMode, mb)
 	}
 	elapsed := time.Since(start)
 	c.stats.ComputeMicros = elapsed.Microseconds()
@@ -437,4 +453,63 @@ func newPrep(n int) []int64 {
 		p[i] = -1
 	}
 	return p
+}
+
+// summarize extracts the best route of a mode from its option.
+func summarize(o *model.PromiseOption) model.ModeBest {
+	mb := model.ModeBest{
+		DeliveryMode: o.DeliveryMode, OptionID: o.ID, Strategy: o.Strategy, EstimatedDelivery: o.EstimatedDelivery,
+		Cost: o.Metrics["cost"], Price: o.Metrics["price"], CarbonKg: o.Metrics["carbonKg"], Currency: o.Currency,
+		Packages: o.TotalPackages, Carriers: []model.CarrierUse{}, ShippingPoints: []string{}, AlternativeShippingPoints: []string{},
+	}
+	points := map[string]bool{}
+	alts := map[string]bool{}
+	carriers := map[string]int{}
+	for _, pk := range o.Packages {
+		if pk.LeadTimeHours > mb.LeadTimeHours {
+			mb.LeadTimeHours = pk.LeadTimeHours
+		}
+		for _, sp := range pk.SourceStockPoints {
+			if !points[sp] {
+				points[sp] = true
+				mb.ShippingPoints = append(mb.ShippingPoints, sp)
+			}
+		}
+		for _, a := range pk.Alternatives {
+			if !a.Current && !alts[a.StockPointID] {
+				alts[a.StockPointID] = true
+			}
+		}
+		if len(pk.Route) == 0 {
+			continue
+		}
+		last := pk.Route[len(pk.Route)-1]
+		key := last.Carrier + "|" + last.Service
+		i, ok := carriers[key]
+		if !ok {
+			i = len(mb.Carriers)
+			carriers[key] = i
+			mb.Carriers = append(mb.Carriers, model.CarrierUse{CarrierID: last.Carrier, CarrierName: last.CarrierName, ServiceID: last.Service, ServiceName: last.ServiceName, RouteIDs: []string{}})
+		}
+		cu := &mb.Carriers[i]
+		cu.Packages++
+		if last.RouteID != "" {
+			seen := false
+			for _, r := range cu.RouteIDs {
+				seen = seen || r == last.RouteID
+			}
+			if !seen {
+				cu.RouteIDs = append(cu.RouteIDs, last.RouteID)
+			}
+		}
+	}
+	for _, pk := range o.Packages {
+		for _, a := range pk.Alternatives {
+			if alts[a.StockPointID] && !points[a.StockPointID] {
+				alts[a.StockPointID] = false
+				mb.AlternativeShippingPoints = append(mb.AlternativeShippingPoints, a.StockPointID)
+			}
+		}
+	}
+	return mb
 }

@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/onestock/dp100ms/pkg/calendar"
+	"github.com/onestock/dp100ms/pkg/geo"
 	"github.com/onestock/dp100ms/pkg/model"
 	"github.com/onestock/dp100ms/pkg/pricing"
 	"github.com/onestock/dp100ms/pkg/store"
@@ -13,9 +14,10 @@ import (
 // Zone is a compiled zone.
 type Zone struct {
 	model.Zone
-	all    bool
-	depts  map[string]bool
-	points map[string]bool
+	all      bool
+	depts    map[string]bool
+	excluded map[string]bool
+	points   map[string]bool
 }
 
 // ContainsNode reports whether a stock point or hub belongs to the zone.
@@ -32,6 +34,9 @@ func (z *Zone) ContainsNode(n *Node) bool {
 // ContainsPostalCode reports whether a postal code belongs to the zone.
 func (z *Zone) ContainsPostalCode(pc string) bool {
 	if z == nil || pc == "" {
+		return false
+	}
+	if z.excluded[deptOf(pc)] {
 		return false
 	}
 	if z.all && !overseas(pc) {
@@ -52,6 +57,9 @@ func (z *Zone) ContainsPostalCode(pc string) bool {
 // explicitly (2) or through "*" (1). Postal code prefixes are matched at
 // department level for destinations.
 func (z *Zone) containsDept(d string) int {
+	if z.excluded[d] {
+		return 0
+	}
 	if z.depts[d] {
 		return 2
 	}
@@ -82,7 +90,7 @@ func (z *Zone) explicitDepts() []string {
 
 func (z *Zone) size() int {
 	if z.all {
-		return 1 << 20
+		return 1<<20 - len(z.excluded)
 	}
 	return len(z.depts) + len(z.PostalCodes) + len(z.points)
 }
@@ -101,7 +109,10 @@ func overseas(pc string) bool { return strings.HasPrefix(pc, "97") || strings.Ha
 
 // CompileZone compiles a zone.
 func CompileZone(z model.Zone) *Zone {
-	cz := &Zone{Zone: z, depts: map[string]bool{}, points: map[string]bool{}}
+	cz := &Zone{Zone: z, depts: map[string]bool{}, excluded: map[string]bool{}, points: map[string]bool{}}
+	for _, d := range z.ExcludedDepartments {
+		cz.excluded[d] = true
+	}
 	for _, d := range z.Departments {
 		if d == "*" {
 			cz.all = true
@@ -149,11 +160,8 @@ func (p *LegPlan) Window(wd int) (model.TimeOfDay, model.TimeOfDay) {
 
 // attachZonesAndRoutes compiles zones and carrier routes.
 func (n *Network) attachZonesAndRoutes(s *store.Store) {
-	n.Zones = map[string]*Zone{}
-	for _, z := range s.Zones.All() {
-		if z.Active {
-			n.Zones[z.ID] = CompileZone(z)
-		}
+	if n.Zones == nil {
+		n.compileZones(s)
 	}
 	n.routesBySvc = map[string][]*Route{}
 	n.RouteByID = map[string]*Route{}
@@ -221,6 +229,101 @@ func (n *Network) attachZonesAndRoutes(s *store.Store) {
 		n.routesBySvc[r.ServiceID] = append(n.routesBySvc[r.ServiceID], cr)
 		n.RouteByID[r.ID] = cr
 	}
+}
+
+func (n *Network) compileZones(s *store.Store) {
+	n.Zones = map[string]*Zone{}
+	for _, z := range s.Zones.All() {
+		if z.Active {
+			n.Zones[z.ID] = CompileZone(z)
+		}
+	}
+}
+
+// deliversCustomer reports whether a service kind delivers the customer
+// (line-haul and shuttle services only move goods between sites).
+func deliversCustomer(k model.ServiceKind) bool {
+	return k != model.KindLinehaul && k != model.KindShuttle
+}
+
+// routeLegs generates the direct legs defined by the carrier routes: one
+// leg per (stock point of an origin zone, service) covering the union of
+// the destination zones. It also returns the services having such routes:
+// their explicit legs to the customer are replaced.
+func (n *Network) routeLegs(s *store.Store, services map[string]*model.CarrierService) ([]model.Leg, map[string]bool) {
+	routes := s.CarrierRoutes.All()
+	sort.Slice(routes, func(i, j int) bool { return routes[i].ID < routes[j].ID })
+	type group struct {
+		node  *Node
+		svc   *model.CarrierService
+		dests []*Zone
+	}
+	groups := map[string]*group{}
+	var order []string
+	routed := map[string]bool{}
+	for _, r := range routes {
+		svc := services[r.ServiceID]
+		car := n.Carriers[r.CarrierID]
+		origin, dest := n.Zones[r.OriginZoneID], n.Zones[r.DestinationZoneID]
+		if !r.Active || svc == nil || car == nil || !svc.Active || !car.Active || svc.CarrierID != car.ID || !deliversCustomer(svc.Kind) || origin == nil || dest == nil {
+			continue
+		}
+		routed[svc.ID] = true
+		for _, node := range n.NodeList {
+			if node.StockPoint == nil && !origin.points[node.ID] {
+				continue // platforms ship only when the zone names them
+			}
+			if !origin.ContainsNode(node) {
+				continue
+			}
+			key := svc.ID + "\x00" + node.ID
+			g := groups[key]
+			if g == nil {
+				g = &group{node: node, svc: svc}
+				groups[key] = g
+				order = append(order, key)
+			}
+			g.dests = append(g.dests, dest)
+		}
+	}
+	depts := make([]string, 0, len(geo.Depts))
+	for d := range geo.Depts {
+		depts = append(depts, d)
+	}
+	sort.Strings(depts)
+	legs := make([]model.Leg, 0, len(order))
+	for _, key := range order {
+		g := groups[key]
+		var zones []string
+		seen := map[string]bool{}
+		add := func(d string) {
+			if !seen[d] {
+				seen[d] = true
+				zones = append(zones, d)
+			}
+		}
+		for _, d := range depts {
+			for _, z := range g.dests {
+				if z.containsDept(d) > 0 {
+					add(d)
+					break
+				}
+			}
+		}
+		for _, z := range g.dests {
+			for _, d := range z.explicitDepts() {
+				if !z.excluded[d] {
+					add(d)
+				}
+			}
+		}
+		if len(zones) == 0 {
+			continue
+		}
+		legs = append(legs, model.Leg{ID: "RT-" + g.svc.ID + "-" + g.node.ID, From: g.node.ID, To: model.CustomerNode,
+			CarrierID: g.svc.CarrierID, ServiceID: g.svc.ID, DestinationZones: zones, Active: true})
+	}
+	return legs, routed
 }
 
 // better reports whether route a beats route b for a destination match.

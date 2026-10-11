@@ -332,6 +332,14 @@ func Generate(cfg Config) *store.Store {
 		s.Legs.LoadRaw(l)
 		return l.ID
 	}
+	// direct deliveries to the customer are defined by carrier routes
+	// (generateRoutes): the engine derives one leg per stock point of the
+	// origin zone and service, with the id RT-<service>-<point>.
+	var finals []model.Leg
+	addFinal := func(l model.Leg) string {
+		finals = append(finals, l)
+		return "RT-" + l.ServiceID + "-" + l.From
+	}
 	lmhByMetro := map[string]site{}
 	for _, st := range sites {
 		if st.typ == model.StockPointLastMileHub {
@@ -353,13 +361,13 @@ func Generate(cfg Config) *store.Store {
 		switch st.typ {
 		case model.StockPointStore:
 			if r.Float64() < 0.85 {
-				addLeg(model.Leg{From: st.id, To: model.CustomerNode, CarrierID: "COLIVIA", ServiceID: "COLIVIA-STD", Departures: []model.TimeOfDay{tod([]string{"16:00", "17:00"}[r.Intn(2)])}, CutoffMinutesBefore: 30})
+				addFinal(model.Leg{From: st.id, To: model.CustomerNode, CarrierID: "COLIVIA", ServiceID: "COLIVIA-STD", Departures: []model.TimeOfDay{tod([]string{"16:00", "17:00"}[r.Intn(2)])}, CutoffMinutesBefore: 30})
 			}
 			if r.Float64() < 0.7 {
-				addLeg(model.Leg{From: st.id, To: model.CustomerNode, CarrierID: "RELAISPLUS", ServiceID: "RELAIS-STD", Departures: []model.TimeOfDay{tod("16:30")}, CutoffMinutesBefore: 15})
+				addFinal(model.Leg{From: st.id, To: model.CustomerNode, CarrierID: "RELAISPLUS", ServiceID: "RELAIS-STD", Departures: []model.TimeOfDay{tod("16:30")}, CutoffMinutesBefore: 15})
 			}
 			if st.metro != "" && r.Float64() < 0.6 || st.metro == "" && r.Float64() < 0.25 {
-				addLeg(model.Leg{From: st.id, To: model.CustomerNode, CarrierID: "EXPRESSO", ServiceID: "EXPRESSO-EXP", Departures: []model.TimeOfDay{tod("17:30")}, CutoffMinutesBefore: 30})
+				addFinal(model.Leg{From: st.id, To: model.CustomerNode, CarrierID: "EXPRESSO", ServiceID: "EXPRESSO-EXP", Departures: []model.TimeOfDay{tod("17:30")}, CutoffMinutesBefore: 30})
 			}
 			if st.metro != "" {
 				if lmh, ok := lmhByMetro[st.metro]; ok {
@@ -367,7 +375,7 @@ func Generate(cfg Config) *store.Store {
 					addLeg(model.Leg{From: st.id, To: lmh.id, CarrierID: "NAVETTE", ServiceID: "NAVETTE-REG", Departures: []model.TimeOfDay{tod("12:00"), tod("17:30")}, CutoffMinutesBefore: 15, TransitMinutes: 30 + int(km*2)})
 				}
 				if r.Float64() < 0.6 {
-					addLeg(model.Leg{From: st.id, To: model.CustomerNode, CarrierID: "URBIKE", ServiceID: "URBIKE-SFS", DestinationZones: MetroDepts[st.metro], Departures: []model.TimeOfDay{tod("15:00")}, CutoffMinutesBefore: 15})
+					addFinal(model.Leg{From: st.id, To: model.CustomerNode, CarrierID: "URBIKE", ServiceID: "URBIKE-SFS", DestinationZones: MetroDepts[st.metro], Departures: []model.TimeOfDay{tod("15:00")}, CutoffMinutesBefore: 15})
 				}
 			}
 			if st.metro == "" || r.Float64() < 0.5 {
@@ -376,9 +384,9 @@ func Generate(cfg Config) *store.Store {
 				addLeg(model.Leg{From: st.id, To: h.id, CarrierID: "TRANSALP", ServiceID: "TRANSALP-LH", Departures: []model.TimeOfDay{tod("18:30")}, CutoffMinutesBefore: 30, TransitMinutes: linehaulMinutes(km)})
 			}
 		case model.StockPointWarehouse:
-			addLeg(model.Leg{From: st.id, To: model.CustomerNode, CarrierID: "COLIVIA", ServiceID: "COLIVIA-STD", Departures: []model.TimeOfDay{tod("20:00")}, CutoffMinutesBefore: 60})
-			addLeg(model.Leg{From: st.id, To: model.CustomerNode, CarrierID: "EXPRESSO", ServiceID: "EXPRESSO-EXP", Departures: []model.TimeOfDay{tod("19:00")}, CutoffMinutesBefore: 60})
-			addLeg(model.Leg{From: st.id, To: model.CustomerNode, CarrierID: "RELAISPLUS", ServiceID: "RELAIS-STD", Departures: []model.TimeOfDay{tod("19:30")}, CutoffMinutesBefore: 60})
+			addFinal(model.Leg{From: st.id, To: model.CustomerNode, CarrierID: "COLIVIA", ServiceID: "COLIVIA-STD", Departures: []model.TimeOfDay{tod("20:00")}, CutoffMinutesBefore: 60})
+			addFinal(model.Leg{From: st.id, To: model.CustomerNode, CarrierID: "EXPRESSO", ServiceID: "EXPRESSO-EXP", Departures: []model.TimeOfDay{tod("19:00")}, CutoffMinutesBefore: 60})
+			addFinal(model.Leg{From: st.id, To: model.CustomerNode, CarrierID: "RELAISPLUS", ServiceID: "RELAIS-STD", Departures: []model.TimeOfDay{tod("19:30")}, CutoffMinutesBefore: 60})
 			for _, l := range sites {
 				if l.typ != model.StockPointLastMileHub {
 					continue
@@ -394,15 +402,15 @@ func Generate(cfg Config) *store.Store {
 			addLeg(model.Leg{From: st.id, To: h.id, CarrierID: "TRANSALP", ServiceID: "TRANSALP-LH", Departures: []model.TimeOfDay{tod("22:00")}, CutoffMinutesBefore: 60, TransitMinutes: linehaulMinutes(km)})
 		case model.StockPointLastMileHub:
 			zones := MetroDepts[st.metro]
-			lmhFinalAM[st.id] = addLeg(model.Leg{From: st.id, To: model.CustomerNode, CarrierID: "URBIKE", ServiceID: "URBIKE-AM", DestinationZones: zones, Departures: []model.TimeOfDay{tod("07:30")}, CutoffMinutesBefore: 30})
-			addLeg(model.Leg{From: st.id, To: model.CustomerNode, CarrierID: "URBIKE", ServiceID: "URBIKE-PM", DestinationZones: zones, Departures: []model.TimeOfDay{tod("13:30")}, CutoffMinutesBefore: 30})
-			addLeg(model.Leg{From: st.id, To: model.CustomerNode, CarrierID: "URBIKE", ServiceID: "URBIKE-SD", DestinationZones: zones, Departures: []model.TimeOfDay{tod("15:30")}, CutoffMinutesBefore: 30})
-			addLeg(model.Leg{From: st.id, To: model.CustomerNode, CarrierID: "COLIVIA", ServiceID: "COLIVIA-STD", Departures: []model.TimeOfDay{tod("19:00")}, CutoffMinutesBefore: 30})
+			lmhFinalAM[st.id] = addFinal(model.Leg{From: st.id, To: model.CustomerNode, CarrierID: "URBIKE", ServiceID: "URBIKE-AM", DestinationZones: zones, Departures: []model.TimeOfDay{tod("07:30")}, CutoffMinutesBefore: 30})
+			addFinal(model.Leg{From: st.id, To: model.CustomerNode, CarrierID: "URBIKE", ServiceID: "URBIKE-PM", DestinationZones: zones, Departures: []model.TimeOfDay{tod("13:30")}, CutoffMinutesBefore: 30})
+			addFinal(model.Leg{From: st.id, To: model.CustomerNode, CarrierID: "URBIKE", ServiceID: "URBIKE-SD", DestinationZones: zones, Departures: []model.TimeOfDay{tod("15:30")}, CutoffMinutesBefore: 30})
+			addFinal(model.Leg{From: st.id, To: model.CustomerNode, CarrierID: "COLIVIA", ServiceID: "COLIVIA-STD", Departures: []model.TimeOfDay{tod("19:00")}, CutoffMinutesBefore: 30})
 		}
 	}
 	for _, h := range regionalHubs {
-		addLeg(model.Leg{From: h.id, To: model.CustomerNode, CarrierID: "COLIVIA", ServiceID: "COLIVIA-REG", DestinationZones: RegionDepts[h.region], Departures: []model.TimeOfDay{tod("06:00"), tod("14:00")}, CutoffMinutesBefore: 30})
-		addLeg(model.Leg{From: h.id, To: model.CustomerNode, CarrierID: "EXPRESSO", ServiceID: "EXPRESSO-HUB", DestinationZones: RegionDepts[h.region], Departures: []model.TimeOfDay{tod("05:30")}, CutoffMinutesBefore: 30})
+		addFinal(model.Leg{From: h.id, To: model.CustomerNode, CarrierID: "COLIVIA", ServiceID: "COLIVIA-REG", DestinationZones: RegionDepts[h.region], Departures: []model.TimeOfDay{tod("06:00"), tod("14:00")}, CutoffMinutesBefore: 30})
+		addFinal(model.Leg{From: h.id, To: model.CustomerNode, CarrierID: "EXPRESSO", ServiceID: "EXPRESSO-HUB", DestinationZones: RegionDepts[h.region], Departures: []model.TimeOfDay{tod("05:30")}, CutoffMinutesBefore: 30})
 		for _, l := range sites {
 			if l.typ != model.StockPointLastMileHub || l.region != h.region {
 				continue
@@ -443,6 +451,7 @@ func Generate(cfg Config) *store.Store {
 	s.InitStock(skus)
 	generateStock(s, cfg, nil)
 	generatePricing(s)
+	generateRoutes(s, finals)
 	s.LoadSettingsRaw(model.DefaultSettings())
 	generateScenarios(s)
 	s.BumpConfig()

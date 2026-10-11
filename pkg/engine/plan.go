@@ -407,7 +407,8 @@ func (c *reqCtx) legResults(s *shipPlan) []model.LegResult {
 		c.legMetrics(lt.leg, s.m, len(lts), m)
 		out[i] = model.LegResult{
 			LegID: lt.leg.ID, From: lt.leg.From, To: lt.leg.To, Carrier: lt.leg.Carrier.ID, CarrierName: lt.leg.Carrier.Name,
-			Service: lt.leg.Service.ID, ServiceKind: lt.leg.Service.Kind,
+			Service: lt.leg.Service.ID, ServiceName: lt.leg.Service.Name, ServiceKind: lt.leg.Service.Kind,
+			RouteID:            lt.leg.Plan(c.dept).RouteID,
 			EstimatedDeparture: c.clk.Time(lt.dep), EstimatedArrival: c.clk.Time(lt.arr), Cost: round2(m[0]),
 			DistanceKm: math.Round(c.legDistance(lt.leg)*10) / 10, Metrics: c.net.Registry.Map(m),
 		}

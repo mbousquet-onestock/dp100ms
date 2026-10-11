@@ -334,7 +334,32 @@ type DeliveryMode struct {
 	// scope, e.g. free shipping above an order amount). Without a card the
 	// mode Price is billed.
 	PriceRateCardIDs []string `json:"priceRateCardIds,omitempty"`
-	Active           bool     `json:"active"`
+	// ServiceIDs are the carrier services compared for this mode (the
+	// engine keeps the best route). Empty = the services listing the mode
+	// in their own modes.
+	ServiceIDs []string `json:"serviceIds,omitempty"`
+	// Operations add time around the transport: payment or validation
+	// before preparation, preparation and packing, reception after delivery.
+	Operations []ModeOperation `json:"operations,omitempty"`
+	Active     bool            `json:"active"`
+}
+
+// Operation kinds of a delivery mode.
+const (
+	OpPayment     = "PAYMENT"     // before preparation, elapsed time (payment authorisation)
+	OpValidation  = "VALIDATION"  // before preparation, elapsed time (fraud check, order release)
+	OpPreparation = "PREPARATION" // replaces the preparation time of the stock points (working hours)
+	OpPacking     = "PACKING"     // added to the preparation time (working hours)
+	OpReception   = "RECEPTION"   // after delivery, elapsed time (reception at the pick-up point or store)
+)
+
+var ModeOperationKinds = []string{OpPayment, OpValidation, OpPreparation, OpPacking, OpReception}
+
+// ModeOperation is a timed operation of a delivery mode.
+type ModeOperation struct {
+	Kind    string `json:"kind"`
+	Name    string `json:"name,omitempty"`
+	Minutes int    `json:"minutes"`
 }
 
 // SKU describes a catalog article.

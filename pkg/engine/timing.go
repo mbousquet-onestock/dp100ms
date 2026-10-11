@@ -1,6 +1,8 @@
 package engine
 
 import (
+	"fmt"
+
 	"github.com/onestock/dp100ms/pkg/model"
 	"github.com/onestock/dp100ms/pkg/network"
 )
@@ -118,18 +120,61 @@ func (c *reqCtx) computeTiming(p *network.Path, start int64) *pathTiming {
 	return pt
 }
 
+// modeOps are the timed operations of a delivery mode.
+type modeOps struct {
+	key       string
+	shift     int64 // seconds between the order and the start of preparation
+	prepSet   bool  // PREPARATION replaces the stock point preparation time
+	prep      int   // minutes
+	extra     int   // PACKING minutes added to the preparation
+	reception int64 // seconds added after delivery
+}
+
+func opsOf(m *model.DeliveryMode) modeOps {
+	var o modeOps
+	if m == nil {
+		return o
+	}
+	for _, op := range m.Operations {
+		switch op.Kind {
+		case model.OpPayment, model.OpValidation:
+			o.shift += int64(op.Minutes) * 60
+		case model.OpPreparation:
+			o.prepSet = true
+			o.prep += op.Minutes
+		case model.OpPacking:
+			o.extra += op.Minutes
+		case model.OpReception:
+			o.reception += int64(op.Minutes) * 60
+		}
+	}
+	o.key = fmt.Sprintf("%d|%t|%d|%d", o.shift, o.prepSet, o.prep, o.extra)
+	return o
+}
+
 // prepReady returns when a stock point has prepared an order placed at the
-// request's order date (memoised per request; 0 = never).
+// request's order date, after the operations of the current mode
+// (memoised per request and operation set; 0 = never).
 func (c *reqCtx) prepReady(node *network.Node) (int64, bool) {
-	if t := c.prep[node.Idx]; t != -1 {
+	memo := c.prep[c.ops.key]
+	if memo == nil {
+		memo = newPrep(len(c.net.NodeList))
+		c.prep[c.ops.key] = memo
+	}
+	if t := memo[node.Idx]; t != -1 {
 		return t, t != 0
 	}
 	sp := node.StockPoint
-	t, ok := c.clk.PreparationReady(node.PrepCal, c.orderU, sp.OpeningTime, sp.ClosingTime, sp.Cutoff, sp.PrepTimeMinutes)
+	minutes := sp.PrepTimeMinutes
+	if c.ops.prepSet {
+		minutes = c.ops.prep
+	}
+	minutes += c.ops.extra
+	t, ok := c.clk.PreparationReady(node.PrepCal, c.orderU+c.ops.shift, sp.OpeningTime, sp.ClosingTime, sp.Cutoff, minutes)
 	if !ok {
 		t = 0
 	}
-	c.prep[node.Idx] = t
+	memo[node.Idx] = t
 	return t, ok
 }
 

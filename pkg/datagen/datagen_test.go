@@ -39,7 +39,7 @@ func TestReferenceVolumes(t *testing.T) {
 			t.Errorf("missing agglomeration %s", c)
 		}
 	}
-	if s.Carriers.Len() < 3 || s.Services.Len() < 6 || s.Legs.Len() < 300 || s.Routes.Len() == 0 {
+	if s.Carriers.Len() < 3 || s.Services.Len() < 6 || s.Legs.Len() < 150 || s.Routes.Len() == 0 || s.CarrierRoutes.Len() < 30 || s.Zones.Len() < 10 {
 		t.Errorf("network too small: %+v", c)
 	}
 	multi := 0

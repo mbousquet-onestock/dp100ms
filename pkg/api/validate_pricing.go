@@ -123,6 +123,27 @@ func validateModePricing(st *store.Store, v *model.DeliveryMode) []fe {
 			errs = append(errs, fe{Field: "stockViewId", Message: "unknown stock view"})
 		}
 	}
+	for i, id := range v.ServiceIDs {
+		svc, ok := st.Services.Get(id)
+		if !ok {
+			errs = append(errs, fe{Field: fmt.Sprintf("serviceIds[%d]", i), Message: "unknown service " + id})
+		} else if svc.Kind == model.KindLinehaul || svc.Kind == model.KindShuttle {
+			errs = append(errs, fe{Field: fmt.Sprintf("serviceIds[%d]", i), Message: "service " + id + " does not deliver the customer"})
+		}
+	}
+	for i, op := range v.Operations {
+		p := fmt.Sprintf("operations[%d]", i)
+		ok := false
+		for _, k := range model.ModeOperationKinds {
+			ok = ok || op.Kind == k
+		}
+		if !ok {
+			errs = append(errs, fe{Field: p + ".kind", Message: strings.Join(model.ModeOperationKinds, ", ")})
+		}
+		if op.Minutes < 0 || op.Minutes > 14*24*60 {
+			errs = append(errs, fe{Field: p + ".minutes", Message: "must be between 0 and 20160"})
+		}
+	}
 	return append(errs, checkCards(st, "priceRateCardIds", v.PriceRateCardIDs, true)...)
 }
 
@@ -234,6 +255,11 @@ func validateZone(st *store.Store, v *model.Zone) []fe {
 	for i, d := range v.Departments {
 		if d != "*" && (len(d) < 2 || len(d) > 3) {
 			errs = append(errs, fe{Field: fmt.Sprintf("departments[%d]", i), Message: "department code (e.g. 33, 2A, 974) or *"})
+		}
+	}
+	for i, d := range v.ExcludedDepartments {
+		if len(d) < 2 || len(d) > 3 {
+			errs = append(errs, fe{Field: fmt.Sprintf("excludedDepartments[%d]", i), Message: "department code (e.g. 20)"})
 		}
 	}
 	for i, p := range v.PostalCodes {

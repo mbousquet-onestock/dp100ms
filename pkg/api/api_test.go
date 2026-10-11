@@ -303,19 +303,17 @@ func TestPricingConfigurationEndpoints(t *testing.T) {
 	}
 }
 
-func TestCarrierSchedules(t *testing.T) {
+func TestCarrierPlanningPreview(t *testing.T) {
 	s := server(t)
 	rec := call(t, s, "POST", "/api/v1/carriers/COLIVIA/schedule-preview", `{"serviceId":"COLIVIA-STD","postalCode":"20000","readyAt":"2026-10-12T15:00:00+02:00"}`, false)
-	if rec.Code != 200 || !strings.Contains(rec.Body.String(), "COLIVIA-CORSE") || !strings.Contains(rec.Body.String(), `"routeId":"COLIVIA-STD-FR-CORSE"`) || !strings.Contains(rec.Body.String(), `"transitMaxHours":96`) || !strings.Contains(rec.Body.String(), "ROUTE:COLIVIA-STD-FR-CORSE") {
+	if rec.Code != 200 || !strings.Contains(rec.Body.String(), `"routeId":"COLIVIA-STD-CORSE"`) || !strings.Contains(rec.Body.String(), `"transitMaxHours":96`) || !strings.Contains(rec.Body.String(), "ROUTE:COLIVIA-STD-CORSE") {
 		t.Fatalf("corsica preview: %d %s", rec.Code, rec.Body)
 	}
 	rec = call(t, s, "POST", "/api/v1/carriers/COLIVIA/schedule-preview", `{"serviceId":"COLIVIA-STD","postalCode":"33000","readyAt":"2026-10-12T15:00:00+02:00"}`, false)
-	if !strings.Contains(rec.Body.String(), `"routeId":"COLIVIA-STD-FR-FR"`) || !strings.Contains(rec.Body.String(), "ROUTE:COLIVIA-STD-FR-FR") {
+	if !strings.Contains(rec.Body.String(), `"routeId":"COLIVIA-STD-LAST-MILE-HUB-FR"`) || !strings.Contains(rec.Body.String(), `"transitMaxHours":48`) {
 		t.Fatalf("national preview: %s", rec.Body)
 	}
-	car := call(t, s, "GET", "/api/v1/carriers/COLIVIA", "", false).Body.String()
-	bad := strings.Replace(car, `"serviceIds":["COLIVIA-STD"]`, `"serviceIds":["EXPRESSO-EXP"]`, 1)
-	bad = strings.Replace(bad, `"cutoff":"20:00"`, `"cutoff":"20:00","pickupDays":[9]`, 1)
+	bad := `{"id":"COLIVIA","name":"Colivia","active":true,"schedules":[{"id":"X","name":"X","serviceIds":["EXPRESSO-EXP"],"pickupDays":[9],"active":true}]}`
 	rec = call(t, s, "PUT", "/api/v1/carriers/COLIVIA", bad, true)
 	if rec.Code != 422 || !strings.Contains(rec.Body.String(), "not a service of carrier COLIVIA") {
 		t.Fatalf("schedule validation: %d %s", rec.Code, rec.Body)
@@ -324,7 +322,7 @@ func TestCarrierSchedules(t *testing.T) {
 
 func TestZonesAndCarrierRoutes(t *testing.T) {
 	s := server(t)
-	if rec := call(t, s, "GET", "/api/v1/carrier-routes?carrierId=COLIVIA&serviceId=COLIVIA-STD", "", false); rec.Code != 200 || !strings.Contains(rec.Body.String(), `"total":3`) {
+	if rec := call(t, s, "GET", "/api/v1/carrier-routes?carrierId=COLIVIA&serviceId=COLIVIA-STD", "", false); rec.Code != 200 || !strings.Contains(rec.Body.String(), `"total":5`) {
 		t.Fatalf("list routes: %d %s", rec.Code, rec.Body)
 	}
 	if rec := call(t, s, "POST", "/api/v1/zones", `{"id":"BZH","name":"Bretagne","departments":["22","29","35","56"],"active":true}`, true); rec.Code != 201 {
