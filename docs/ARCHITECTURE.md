@@ -85,6 +85,7 @@ flowchart LR
 | `pkg/calendar` | French holidays (Easter-based included), working days, opening hours, cut-offs, departures; integer clock with per-day DST table. |
 | `pkg/network` | Compiles the graph, enumerates bounded paths per (department, mode), caches them, canonicalises identical paths. |
 | `pkg/engine` | Candidate prefilter, beam-search allocation, packing, direct and consolidated plans, timing, scoring, response building. |
+| `pkg/pricing` | Article rules, restrictions, rate card compilation and evaluation (cost, price, carbon, custom outputs). See `docs/PRICING.md`. |
 | `pkg/geo` | Department centroids, distances. |
 | `pkg/datagen` | Reproducible dataset. |
 | `pkg/bench` | Live latency recorder, basket generator, built-in load generator. |
@@ -167,6 +168,10 @@ The engine never claims global optimality: it returns several good solutions fou
 | Joins per request | All data in memory, compiled once per configuration version |
 | Unbounded path search | `maxLegs` (≤ 5), hubs only as transit, no cycles, cached per (department, mode) |
 | Calendar recomputation | Integer clock (per-day DST and holiday tables for 2015-2045), memoised preparation and path timings per request, canonical paths shared across modes |
+
+### Pricing in the search
+
+Rate cards are compiled with the network (one output registry per configuration version). For each candidate path the engine checks the article restrictions of every leg (bitmask of basket items per leg, cached per request), packs the parcels, measures them once per limit set and evaluates the leg cards (PARCEL or SHIPMENT scope); a card with `noMatch: REJECT` can make a path infeasible. Per allocation it keeps the fastest, cheapest and lowest-carbon path of every shipment (plus custom criteria outputs), then adds order-level outputs (customer price cards with franco, requested additional services and their delays) and ranks plans with the delivery mode criteria. Stock views filter candidate points and articles before the beam search. Details: `docs/PRICING.md`.
 
 ## 6. Stock consistency and freshness
 

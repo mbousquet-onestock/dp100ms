@@ -14,7 +14,9 @@ The same code runs in three ways:
 |---|---|---|
 | `ADMIN_TOKEN` | `dev-admin-token` | Bearer token of the admin API. **Set it in every shared environment.** |
 | `SEED` | `42` | Dataset seed when generating in memory. |
-| `DATABASE_URL` | unset | PostgreSQL URL. Enables migrations, persistence and loading at boot (auto-seeded when empty). |
+| `DATABASE_URL` (or `POSTGRES_URL`) | unset | PostgreSQL URL used at runtime. Enables migrations, persistence and loading at boot. An empty database is initialised automatically at the first connection. |
+| `DATABASE_URL_UNPOOLED` (or `POSTGRES_URL_NON_POOLING`) | runtime URL | Direct connection used for migrations and the initial load (advisory lock). Set automatically by the Vercel / Neon integration. |
+| `STOCK_STORAGE` | `delta` | `delta`: the database stores the configuration, the catalog and only the stock lines changed since the initial load; the 1.2M-line baseline is regenerated from the seed at boot. `full`: all stock lines are stored. |
 | `STOCK_SOURCE` | `database` | `generate` forces in-memory generation even with a database. |
 | `STATIC_DIR` | unset (`/app/web` in the image) | Built frontend served by `cmd/server`. |
 | `PLATFORM` | auto (`vercel`, `cloudrun`, `local`) | Label shown in the UI and benchmark reports. |
@@ -46,9 +48,31 @@ vercel env add ADMIN_TOKEN production
 vercel deploy --prod
 ```
 
-### Optional database on Vercel
+### Database on Vercel (data saved, initialised at the first connection)
 
-Add a PostgreSQL database (Vercel Marketplace → Neon, or any PostgreSQL 14+) and set `DATABASE_URL` (with `sslmode=require`). Run the seed once from your machine: `DATABASE_URL=… make seed`. Each cold start then loads the 1.2M stock lines from the database (about 1-3 s depending on the database location) and admin changes are persisted.
+1. In the Vercel project: **Storage → Create Database → Neon (Postgres)**, or **Marketplace → Neon**, and connect it to the project for every environment. The integration adds `DATABASE_URL`, `DATABASE_URL_UNPOOLED`, `POSTGRES_URL`, `POSTGRES_URL_NON_POOLING`… to the project's environment variables. Any PostgreSQL 14+ works too: set `DATABASE_URL` yourself (with `sslmode=require`).
+2. Redeploy (environment variables are read at deployment).
+3. Open the application or call `GET /api/v1/health`. At the first connection the function:
+   - connects with the direct (unpooled) URL and takes a PostgreSQL advisory lock, so that only one instance initialises the database even if several start together;
+   - applies the migrations (`pkg/pg/migrations`);
+   - if the database is empty, generates the reference dataset (seed `SEED`, default 42) and stores the configuration (stock points, carriers, services, hubs, legs, routes, delivery modes, rate cards, additional services, stock views, scenarios, settings) and the 12,000-article catalog with COPY. With the default `STOCK_STORAGE=delta` this takes well under a second locally and a few seconds on a remote database, so it fits within the function timeout;
+   - releases the lock; other instances then load the data.
+4. From then on, every change made in the admin (configuration, articles, stock) is written to PostgreSQL. With `delta` storage, a stock change is stored as a row of `stock_lines` that overrides the generated baseline. Check the state with `GET /api/v1/admin/database` (admin token): seed, stock storage, number of stored stock rows, initialisation date.
+
+The same initialisation can be run from a machine (for example to choose the seed or the storage mode):
+
+```bash
+# re-initialise (replaces the content)
+DATABASE_URL_UNPOOLED="postgres://…" go run ./cmd/seed -seed 42 -storage delta
+# only if the database is empty
+go run ./cmd/seed -db "postgres://…" -if-empty
+# store all 1.2M stock lines (about 30 s locally, longer remotely)
+go run ./cmd/seed -db "postgres://…" -storage full
+```
+
+`POST /api/v1/admin/reseed` with `{"seed": 42, "stockStorage": "delta"}` does it from the API (admin token).
+
+The pooled URL (`…-pooler…`) is used at runtime with the simple query protocol; the direct URL is used for migrations, the lock and the COPY loads.
 
 ### What to know about Vercel
 

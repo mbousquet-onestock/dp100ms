@@ -49,6 +49,8 @@ The admin token defaults to `dev-admin-token` (set `ADMIN_TOKEN` everywhere else
 
 **Configuration** (admin API and screens): stock points with coordinates, opening hours, preparation calendar and time, cut-off, capacity, safety stock and allowed modes; carriers and services (coverage by department with exclusions or postal codes, transit, pickup and delivery calendars, cut-off, delivery window, weight / volume / item limits, costs); hubs (consolidation, sorting, opening hours, maximum wait, unavailability periods, active flag); legs (scheduled departures, cut-off before departure, overrides); explicit multi-leg routes; delivery modes (max legs, max sources, consolidation, split); stock (line, batch, CSV import of up to 2M lines); engine settings (weights, beam width, limits).
 
+**Pricing and rules** ([docs/PRICING.md](docs/PRICING.md)): multi-dimensional rate cards per carrier service or route (weight, volumetric and chargeable weight, dimensions, girth, linear combinations of dimensions, item count, order amount for free shipping, distance, zones, article surcharges) returning transport cost, customer price, carbon or custom outputs; article restrictions on any article field or attribute; associated services (installation, floor delivery, take-back, appointment) priced with their delay; stock views per delivery mode; delivery mode criteria (weighted or by priority, with hard limits) choosing the most suitable route; package-level metrics and sortable alternative shipping points.
+
 **Promise engine**: for every requested mode it returns options with the promised window, the exact composition of every parcel, the source stock points, the legs with carriers, services, departures and arrivals, the consolidations, the preparation groups, a chronological timeline, the cost and a score. Strategies: single source, multi-source direct, consolidated at a hub. Parcels are independent from stock points: a point can produce several parcels, a consolidated parcel can mix several points; the parcel count before and after consolidation is returned. Unservable modes are explained (`DESTINATION_NOT_SERVED`, `NO_STOCK`, `INSUFFICIENT_STOCK`, `NO_FEASIBLE_PLAN`).
 
 **Time**: business days, French public holidays (including Easter Monday, Ascension and Whit Monday), opening hours, preparation spill-over, cut-offs, carrier pickup and delivery calendars, scheduled departures, hub reception hours and unavailability, sorting and consolidation times, Europe/Paris time zone with DST.
@@ -62,6 +64,8 @@ The admin token defaults to `dev-admin-token` (set `ADMIN_TOKEN` everywhere else
 - 100 stores, 10 central warehouses, 10 last-mile hubs (120 stock points) placed in metropolitan France, with more stores in Paris, Lyon, Marseille, Bordeaux, Lille, Toulouse, Nantes, Strasbourg, Nice and Rennes;
 - a shared catalog of 12,000 SKUs (8 categories, weights from 50 g to 22 kg); every stock point lists exactly 10,000 of them (warehouses carry the first 10,000, stores and hubs a random assortment including a store-exclusive collection) → **1,200,000 stock lines**;
 - zero stock (≈ 22 %), partial stock, reservations (≈ 9 % of lines), safety stock in stores;
+- article dimensions, prices and attributes (fragile, hazardous, lithium battery, installable, bulky, store collection);
+- 13 rate cards (cost grids per carrier with volumetric weight, oversize and Corsica surcharges, carbon; customer prices with free shipping per mode), restrictions (pick-up point format, cargo bike format, no hazardous goods or lithium batteries by air), 4 associated services, 5 stock views, 5 delivery modes with criteria (STANDARD, EXPRESS, SAME_DAY, RELAY, ECO);
 - 6 fictitious carriers, 11 services, 6 regional consolidation platforms + 10 last-mile hubs, 556 legs (direct, shuttle, line-haul, last mile, same day), 12 explicit three-leg routes;
 - varied opening hours, preparation calendars (some stores closed on Monday, some open on Sunday) and cut-offs; restricted zones (no express in Corsica and some mountain departments, same day only in large cities, overseas not served);
 - 8 reference scenarios (single item, multi-source, after cut-off on a Friday, before public holidays, Corsica, overseas, large quantity).
@@ -101,7 +105,8 @@ A 2-core instance saturates at about 1,900 req/s (≈1 ms of CPU per request, of
 
 - [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md): decisions (Go for Vercel, in-memory engine, no Redis), components, data model, algorithms, heuristic quality, stock consistency, limitations.
 - [docs/API.md](docs/API.md): API guide with examples. Reference: `/docs` in the app, `docs/api/index.html`, `GET /api/v1/openapi.json`.
-- [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md): Vercel, GCP Cloud Run + Cloud SQL, Docker Compose, environment variables.
+- [docs/PRICING.md](docs/PRICING.md): rate cards, franco, carbon, article restrictions, associated services, stock views, delivery mode criteria, package information.
+- [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md): Vercel (with Vercel Postgres / Neon initialised at the first connection), GCP Cloud Run + Cloud SQL, Docker Compose, environment variables.
 - [docs/PERFORMANCE.md](docs/PERFORMANCE.md): benchmark report.
 
 ## Known limitations
