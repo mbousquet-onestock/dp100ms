@@ -2,18 +2,21 @@
 package api
 
 import (
+	"context"
 	"crypto/subtle"
 	"encoding/csv"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"os"
 	"sort"
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/onestock/dp100ms/pkg/bench"
@@ -38,6 +41,12 @@ type Options struct {
 	DB *pg.DB
 	// InitialRuns restores the benchmark history.
 	InitialRuns []*bench.Run
+	// Sync applies the changes written by other instances (shared
+	// database); it returns true when the whole dataset must be reloaded
+	// with Reload. It runs at most every SyncInterval, on incoming requests.
+	Sync         func(ctx context.Context, st *store.Store) (reload bool, err error)
+	Reload       func() (*store.Store, error)
+	SyncInterval time.Duration
 }
 
 // BenchRun is re-exported for bootstrap code.
@@ -46,6 +55,8 @@ type BenchRun = bench.Run
 // Server holds the application state. The store can be swapped atomically
 // by an admin reseed.
 type Server struct {
+	syncMu   sync.Mutex
+	lastSync atomic.Int64
 	mu       sync.RWMutex
 	st       *store.Store
 	eng      *engine.Engine
@@ -105,6 +116,9 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if r.Method == http.MethodOptions {
 		w.WriteHeader(http.StatusNoContent)
 		return
+	}
+	if s.opts.Sync != nil && strings.HasPrefix(r.URL.Path, "/api/") {
+		s.maybeSync()
 	}
 	start := time.Now()
 	sw := &statusWriter{ResponseWriter: w, status: 200}
@@ -991,10 +1005,7 @@ func (s *Server) reseed(w http.ResponseWriter, r *http.Request) {
 		writeProblem(w, r, 500, "internal", err.Error(), nil)
 		return
 	}
-	s.mu.Lock()
-	s.st = st
-	s.eng = engine.New(st)
-	s.mu.Unlock()
+	s.swap(st)
 	writeJSON(w, 200, map[string]any{"seed": body.Seed, "counts": st.Counts(), "durationMs": time.Since(t0).Milliseconds()})
 }
 
@@ -1127,4 +1138,38 @@ func (s *Server) databaseStatus(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, 200, map[string]any{"persistence": true, "dataset": m, "lastPersistError": s.store().LastPersistError()})
+}
+
+// swap replaces the store (reseed, reload after another instance's reseed).
+func (s *Server) swap(st *store.Store) {
+	s.mu.Lock()
+	s.st = st
+	s.eng = engine.New(st)
+	s.mu.Unlock()
+}
+
+// maybeSync applies the changes of the other instances, at most every
+// SyncInterval and by one request at a time (the others do not wait).
+func (s *Server) maybeSync() {
+	now := time.Now().UnixNano()
+	if now-s.lastSync.Load() < int64(s.opts.SyncInterval) || !s.syncMu.TryLock() {
+		return
+	}
+	defer s.syncMu.Unlock()
+	s.lastSync.Store(now)
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	reload, err := s.opts.Sync(ctx, s.store())
+	if err != nil {
+		log.Printf("sync: %v", err)
+		return
+	}
+	if reload && s.opts.Reload != nil {
+		st, err := s.opts.Reload()
+		if err != nil {
+			log.Printf("sync reload: %v", err)
+			return
+		}
+		s.swap(st)
+	}
 }

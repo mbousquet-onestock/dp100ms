@@ -40,7 +40,67 @@ type Collection[T any] struct {
 }
 
 func newCollection[T any](owner *Store, kind string, id func(*T) string) *Collection[T] {
-	return &Collection[T]{kind: kind, items: map[string]*T{}, id: id, owner: owner}
+	c := &Collection[T]{kind: kind, items: map[string]*T{}, id: id, owner: owner}
+	if owner.remote == nil {
+		owner.remote = map[string]remoteCollection{}
+	}
+	owner.remote[kind] = c
+	return c
+}
+
+// remoteCollection applies changes made by another instance.
+type remoteCollection interface {
+	LoadJSON(b []byte) error
+	RemoveRaw(id string)
+}
+
+// RemoveRaw deletes without notifications (changes from another instance).
+func (c *Collection[T]) RemoveRaw(id string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if _, ok := c.items[id]; !ok {
+		return
+	}
+	delete(c.items, id)
+	for i, o := range c.order {
+		if o == id {
+			c.order = append(c.order[:i], c.order[i+1:]...)
+			break
+		}
+	}
+}
+
+// ApplyRemote applies an entity written or deleted by another instance,
+// without persisting it again. data is the stored JSON (nil = deleted).
+// It reports whether the kind is known.
+func (s *Store) ApplyRemote(kind, id string, data []byte) (bool, error) {
+	if kind == "settings" {
+		if data != nil {
+			var es model.EngineSettings
+			if err := json.Unmarshal(data, &es); err != nil {
+				return true, err
+			}
+			s.LoadSettingsRaw(es)
+			s.configVersion.Add(1)
+		}
+		return true, nil
+	}
+	c, ok := s.remote[kind]
+	if !ok {
+		return false, nil
+	}
+	if data == nil {
+		c.RemoveRaw(id)
+	} else if err := c.LoadJSON(data); err != nil {
+		return true, err
+	}
+	if kind != "scenario" {
+		s.configVersion.Add(1)
+	}
+	if kind == "stock_point" {
+		s.syncStockPoints()
+	}
+	return true, nil
 }
 
 func (c *Collection[T]) Kind() string { return c.kind }
@@ -179,6 +239,7 @@ type Store struct {
 	configVersion atomic.Uint64
 	persister     Persister
 	persistErr    atomic.Value
+	remote        map[string]remoteCollection
 
 	StockPoints        *Collection[model.StockPoint]
 	Carriers           *Collection[model.Carrier]

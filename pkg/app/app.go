@@ -10,6 +10,7 @@ import (
 	"os"
 	"runtime/debug"
 	"strconv"
+	"sync/atomic"
 	"time"
 
 	"github.com/onestock/dp100ms/pkg/api"
@@ -117,6 +118,17 @@ func InitDatabase(ctx context.Context, directURL string, seed int64, stockMode s
 }
 
 // Bootstrap builds the API server.
+// SyncInterval is how often an instance applies the changes written by the
+// other instances (SYNC_INTERVAL_MS, default 1000 ms, 0 disables).
+func SyncInterval() time.Duration {
+	if v := os.Getenv("SYNC_INTERVAL_MS"); v != "" {
+		if ms, err := strconv.Atoi(v); err == nil && ms >= 0 {
+			return time.Duration(ms) * time.Millisecond
+		}
+	}
+	return time.Second
+}
+
 func Bootstrap(ctx context.Context) (*api.Server, error) {
 	t0 := time.Now()
 	// The heap is small (~50 MB) and mostly long-lived: a higher GC target
@@ -151,6 +163,12 @@ func Bootstrap(ctx context.Context) (*api.Server, error) {
 		if err != nil {
 			return nil, err
 		}
+		// changes written by other instances after this point are synced
+		var seq atomic.Int64
+		if v, err := db.LastSeq(ctx); err == nil {
+			seq.Store(v)
+		}
+		_ = db.PruneChanges(ctx)
 		if os.Getenv("STOCK_SOURCE") == "generate" {
 			st = generate(Seed())
 		} else {
@@ -163,12 +181,38 @@ func Bootstrap(ctx context.Context) (*api.Server, error) {
 		}
 		st.SetPersister(db)
 		opts.DB = db
+		opts.SyncInterval = SyncInterval()
+		if opts.SyncInterval > 0 {
+			opts.Sync = func(ctx context.Context, s *store.Store) (bool, error) {
+				res, err := db.Sync(ctx, s, seq.Load())
+				if err != nil {
+					return false, err
+				}
+				seq.Store(res.Seq)
+				return res.Reload, nil
+			}
+			opts.Reload = func() (*store.Store, error) {
+				ctx := context.Background()
+				if v, err := db.LastSeq(ctx); err == nil {
+					seq.Store(v)
+				}
+				s, _, err := db.LoadAll(ctx, baseline)
+				if err != nil {
+					return nil, err
+				}
+				s.SetPersister(db)
+				return s, nil
+			}
+		}
 		opts.Reseed = func(seed int64, stockMode string) (*store.Store, error) {
 			if stockMode == "" {
 				stockMode = StockStorage()
 			}
 			if _, err := InitDatabase(context.Background(), directURL, seed, stockMode, true); err != nil {
 				return nil, err
+			}
+			if v, err := db.LastSeq(context.Background()); err == nil {
+				seq.Store(v) // our own reseed: no reload needed
 			}
 			s, _, err := db.LoadAll(context.Background(), baseline)
 			if err != nil {

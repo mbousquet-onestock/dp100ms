@@ -17,6 +17,7 @@ The same code runs in three ways:
 | `DATABASE_URL` (or `POSTGRES_URL`) | unset | PostgreSQL URL used at runtime. Enables migrations, persistence and loading at boot. An empty database is initialised automatically at the first connection. |
 | `DATABASE_URL_UNPOOLED` (or `POSTGRES_URL_NON_POOLING`) | runtime URL | Direct connection used for migrations and the initial load (advisory lock). Set automatically by the Vercel / Neon integration. |
 | `STOCK_STORAGE` | `delta` | `delta`: the database stores the configuration, the catalog and only the stock lines changed since the initial load; the 1.2M-line baseline is regenerated from the seed at boot. `full`: all stock lines are stored. |
+| `SYNC_INTERVAL_MS` | `1000` | With a database: how often an instance applies the changes written by the other instances (configuration, stock, articles, reseed). `0` disables. |
 | `STOCK_SOURCE` | `database` | `generate` forces in-memory generation even with a database. |
 | `STATIC_DIR` | unset (`/app/web` in the image) | Built frontend served by `cmd/server`. |
 | `PLATFORM` | auto (`vercel`, `cloudrun`, `local`) | Label shown in the UI and benchmark reports. |
@@ -76,7 +77,7 @@ The pooled URL (`…-pooler…`) is used at runtime with the simple query protoc
 
 ### What to know about Vercel
 
-- **State is per instance.** Without a database, admin changes and the live metrics belong to the instance that handled them, and are lost when the instance is recycled. Several instances can coexist under load.
+- **Several instances.** Vercel runs several instances of the function. With a database, every write (configuration, carrier routes, zones, stock, articles, reseed) is appended to a `change_log` table, and each instance applies the changes it has not seen yet, at most once per `SYNC_INTERVAL_MS` (1 s by default), on its next request: a creation made on one instance is visible on the others within about a second. Without a database, admin changes and the live metrics belong to the instance that handled them and are lost when it is recycled.
 - **Built-in benchmarks** run synchronously inside one function invocation and are capped at 25 s (`maxDuration` 60 s). They measure the function instance, not Vercel's network. Run k6 from your machine against the deployment URL to measure end-to-end latency over the Internet: `BASE_URL=https://<project>.vercel.app make benchmark`.
 - **Cold starts** add the dataset generation to the first request of an instance; k6 results include them (nothing is excluded).
 
@@ -125,7 +126,7 @@ gcloud builds submit --config cloudbuild.yaml \
 ### Sizing notes
 
 - One instance with 2 vCPU sustains the throughput measured in `docs/PERFORMANCE.md` for the 2-core configuration. Scale out with `--max-instances`.
-- Stock updates are applied to the instance that receives them and persisted; other instances see them after a restart (see `docs/ARCHITECTURE.md`, section 6). For multi-instance freshness, add a Pub/Sub topic of stock batches consumed by every instance.
+- Stock and configuration updates are applied to the instance that receives them, persisted, and applied by the other instances within about `SYNC_INTERVAL_MS` (see `docs/ARCHITECTURE.md`, section 6).
 - Keep `--min-instances=1` for latency-sensitive use: the boot loads 1.2M rows.
 
 ## 3. Docker Compose (local)

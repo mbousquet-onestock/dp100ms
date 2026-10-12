@@ -116,4 +116,4 @@ A 2-core instance saturates at about 1,900 req/s (≈1 ms of CPU per request, of
 
 ## Known limitations
 
-Summarised from [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md#8-known-limitations): stock and caches are per process (multi-instance freshness needs an update feed); without a database on Vercel, admin changes are per instance and lost at cold start; capacities are stored but not consumed; packing uses weight, volume and item count (no 3D); one time zone per deployment; the search is heuristic (measured quality in the architecture document).
+Summarised from [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md#8-known-limitations): stock and caches are in memory per process, kept in sync between instances through the database change log (about 1 s); without a database on Vercel, admin changes are per instance and lost at cold start; capacities are stored but not consumed; packing uses weight, volume and item count (no 3D); one time zone per deployment; the search is heuristic (measured quality in the architecture document).

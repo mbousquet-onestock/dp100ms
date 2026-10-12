@@ -130,8 +130,9 @@ func (d *DB) SaveEntity(kind, id string, v any) error {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	_, err = d.Pool.Exec(ctx, `INSERT INTO `+t+` (id, data, updated_at) VALUES ($1, $2, now())
-		ON CONFLICT (id) DO UPDATE SET data = EXCLUDED.data, updated_at = now()`, id, b)
+	_, err = d.Pool.Exec(ctx, `WITH up AS (INSERT INTO `+t+` (id, data, updated_at) VALUES ($1, $2, now())
+		ON CONFLICT (id) DO UPDATE SET data = EXCLUDED.data, updated_at = now() RETURNING 1)
+		INSERT INTO change_log (kind, id, op) SELECT $3, $1, 'upsert' FROM up`, id, b, kind)
 	return err
 }
 
@@ -142,7 +143,8 @@ func (d *DB) DeleteEntity(kind, id string) error {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	_, err := d.Pool.Exec(ctx, `DELETE FROM `+t+` WHERE id = $1`, id)
+	_, err := d.Pool.Exec(ctx, `WITH del AS (DELETE FROM `+t+` WHERE id = $1 RETURNING 1)
+		INSERT INTO change_log (kind, id, op) SELECT $2, $1, 'delete' FROM del`, id, kind)
 	return err
 }
 
@@ -157,9 +159,19 @@ func (d *DB) SaveStockLines(lines []model.StockLine) error {
 		batch.Queue(`INSERT INTO stock_lines (stock_point_id, sku, physical, reserved, listed, updated_at) VALUES ($1,$2,$3,$4,$5,now())
 			ON CONFLICT (stock_point_id, sku) DO UPDATE SET physical=EXCLUDED.physical, reserved=EXCLUDED.reserved, listed=EXCLUDED.listed, updated_at=now()`,
 			l.StockPointID, l.SKU, l.Physical, l.Reserved, l.Listed)
+		if len(lines) <= maxLoggedStockLines {
+			batch.Queue(`INSERT INTO change_log (kind, id, op) VALUES ('stock', $1, 'upsert')`, l.StockPointID+"|"+l.SKU)
+		}
+	}
+	if len(lines) > maxLoggedStockLines {
+		batch.Queue(`INSERT INTO change_log (kind, id, op) VALUES ('stock_all', '', 'reload')`)
 	}
 	return d.Pool.SendBatch(ctx, batch).Close()
 }
+
+// maxLoggedStockLines: larger batches (imports) log a single reload of the
+// stored stock lines instead of one change per line.
+const maxLoggedStockLines = 5000
 
 // IsEmpty reports whether the dataset has never been initialised.
 func (d *DB) IsEmpty(ctx context.Context) (bool, error) {
@@ -314,6 +326,10 @@ func (d *DB) SaveAll(ctx context.Context, s *store.Store, cfg any, stockMode str
 	if _, err := tx.Exec(ctx, `INSERT INTO dataset_meta (id, seed, config, stock_mode, initialized_at) VALUES (1, $1, $2, $3, now())`, s.Seed, cb, stockMode); err != nil {
 		return err
 	}
+	// the other instances reload the whole dataset
+	if _, err := tx.Exec(ctx, `INSERT INTO change_log (kind, id, op) VALUES ('dataset', '', 'reload')`); err != nil {
+		return err
+	}
 	skus := s.Stock.SKUs()
 	rows := make([][]any, len(skus))
 	for i, k := range skus {
@@ -346,7 +362,8 @@ func (d *DB) SaveSKU(k model.SKU) error {
 	if len(k.Attributes) > 0 {
 		attrs, _ = json.Marshal(k.Attributes)
 	}
-	_, err := d.Pool.Exec(ctx, `UPDATE skus SET name=$2, category=$3, weight_kg=$4, volume_l=$5, length_cm=$6, width_cm=$7, height_cm=$8, price_eur=$9, attributes=$10 WHERE code=$1`,
+	_, err := d.Pool.Exec(ctx, `WITH up AS (UPDATE skus SET name=$2, category=$3, weight_kg=$4, volume_l=$5, length_cm=$6, width_cm=$7, height_cm=$8, price_eur=$9, attributes=$10 WHERE code=$1 RETURNING 1)
+		INSERT INTO change_log (kind, id, op) SELECT 'sku', $1, 'upsert' FROM up`,
 		k.Code, k.Name, k.Category, k.WeightKg, k.VolumeL, k.LengthCm, k.WidthCm, k.HeightCm, k.PriceEur, attrs)
 	return err
 }
