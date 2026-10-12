@@ -118,7 +118,9 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if s.opts.Sync != nil && strings.HasPrefix(r.URL.Path, "/api/") {
-		s.maybeSync()
+		// writes always see the latest data (references created a moment
+		// ago through another instance); reads at most once per interval
+		s.maybeSync(r.Method != http.MethodGet && r.Method != http.MethodHead)
 	}
 	start := time.Now()
 	sw := &statusWriter{ResponseWriter: w, status: 200}
@@ -1148,11 +1150,17 @@ func (s *Server) swap(st *store.Store) {
 	s.mu.Unlock()
 }
 
-// maybeSync applies the changes of the other instances, at most every
-// SyncInterval and by one request at a time (the others do not wait).
-func (s *Server) maybeSync() {
+// maybeSync applies the changes of the other instances: before every write,
+// and for reads at most every SyncInterval by one request at a time (the
+// other reads do not wait).
+func (s *Server) maybeSync(force bool) {
 	now := time.Now().UnixNano()
-	if now-s.lastSync.Load() < int64(s.opts.SyncInterval) || !s.syncMu.TryLock() {
+	if !force && now-s.lastSync.Load() < int64(s.opts.SyncInterval) {
+		return
+	}
+	if force {
+		s.syncMu.Lock() // a write waits for a sync in progress
+	} else if !s.syncMu.TryLock() {
 		return
 	}
 	defer s.syncMu.Unlock()
